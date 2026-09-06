@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink: #08080a;
+  --color-surface: #101014;
+  --color-surface-raised: #16161c;
+  --color-edge: #26262e;
+  --color-muted: #7b7b88;
+  --color-long: #22c55e;
+  --color-short: #ef4444;
+  --color-wait: #8b8b98;
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: #e8e8ec;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers line up in columns when every digit is the same width. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

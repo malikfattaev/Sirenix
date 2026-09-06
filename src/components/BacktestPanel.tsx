@@ -1,0 +1,135 @@
+'use client';
+
+import { useState } from 'react';
+import type { BacktestResult } from '@/lib/backtest/engine';
+
+/** The API strips the trade list, so the panel only ever sees the summary. */
+type Summary = Omit<BacktestResult, 'trades'>;
+
+const DAY_OPTIONS = [2, 5, 10];
+
+function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wider text-muted">{label}</div>
+      <div className={`tabular mt-0.5 text-lg font-semibold ${tone ?? ''}`}>{value}</div>
+    </div>
+  );
+}
+
+export function BacktestPanel() {
+  const [days, setDays] = useState(5);
+  const [results, setResults] = useState<Summary[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/backtest?days=${days}`);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? 'Backtest failed');
+      setResults(body.results);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Backtest failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-edge bg-surface p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">STRATEGY CHECK</h3>
+          <p className="mt-1 text-[12px] text-muted">
+            Replays the exact same logic over historical candles, without ever looking at a future one.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-edge">
+            {DAY_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setDays(option)}
+                className={`px-3 py-1.5 text-[12px] transition ${
+                  days === option ? 'bg-surface-raised text-neutral-100' : 'text-muted hover:text-neutral-300'
+                }`}
+              >
+                {option}d
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={run}
+            disabled={loading}
+            className="rounded-lg border border-edge bg-surface-raised px-4 py-1.5 text-[12px] font-medium text-neutral-200 transition hover:border-neutral-600 disabled:opacity-50"
+          >
+            {loading ? 'Running…' : 'Run'}
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="mt-4 text-[13px] text-short">{error}</p>}
+
+      {results && (
+        <div className="mt-5 space-y-5">
+          {results.map((result) => (
+            <div key={result.instrumentId} className="rounded-lg border border-edge bg-surface-raised p-4">
+              <div className="flex items-baseline justify-between">
+                <h4 className="text-[13px] font-semibold tracking-wider text-neutral-300">{result.label}</h4>
+                <span className="text-[11px] text-muted">{result.barsTested} bars replayed</span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                <Metric label="Signals" value={String(result.signals)} />
+                <Metric label="Wins" value={String(result.wins)} tone="text-long" />
+                <Metric label="Losses" value={String(result.losses)} tone="text-short" />
+                <Metric label="Win rate" value={`${result.winRate}%`} />
+                <Metric label="Avg R/R" value={`1:${result.avgRiskReward}`} />
+                <Metric
+                  label="Total"
+                  value={`${result.totalR > 0 ? '+' : ''}${result.totalR}R`}
+                  tone={result.totalR > 0 ? 'text-long' : 'text-short'}
+                />
+              </div>
+
+              {result.byStrategy.length > 0 && (
+                <table className="mt-4 w-full text-left text-[12px]">
+                  <thead className="text-[10px] uppercase tracking-wider text-muted">
+                    <tr className="border-b border-edge">
+                      <th className="py-2 font-medium">Strategy</th>
+                      <th className="py-2 text-right font-medium">n</th>
+                      <th className="py-2 text-right font-medium">Win rate</th>
+                      <th className="py-2 text-right font-medium">Avg R/R</th>
+                      <th className="py-2 text-right font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-edge">
+                    {result.byStrategy.map((row) => (
+                      <tr key={row.strategy}>
+                        <td className="py-2 text-neutral-300">{row.strategy}</td>
+                        <td className="tabular py-2 text-right text-neutral-400">{row.signals}</td>
+                        <td className="tabular py-2 text-right text-neutral-400">{row.winRate}%</td>
+                        <td className="tabular py-2 text-right text-neutral-400">1:{row.avgRiskReward}</td>
+                        <td
+                          className={`tabular py-2 text-right ${row.totalR > 0 ? 'text-long' : 'text-short'}`}
+                        >
+                          {row.totalR > 0 ? '+' : ''}
+                          {row.totalR}R
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
