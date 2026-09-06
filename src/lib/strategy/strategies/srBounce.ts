@@ -10,6 +10,7 @@ import type { Strategy, StrategyCandidate } from '../types';
 export const srBounce: Strategy = {
   key: 'sr-bounce',
   label: 'S/R Bounce',
+  bias: 'reversion',
   regimes: ['RANGE', 'TREND', 'CHOP'],
 
   evaluate(context): StrategyCandidate | null {

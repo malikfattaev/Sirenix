@@ -10,6 +10,7 @@ import type { Strategy, StrategyCandidate } from '../types';
 export const meanReversion: Strategy = {
   key: 'mean-reversion',
   label: 'Range Mean Reversion',
+  bias: 'reversion',
   regimes: ['RANGE'],
 
   evaluate(context): StrategyCandidate | null {

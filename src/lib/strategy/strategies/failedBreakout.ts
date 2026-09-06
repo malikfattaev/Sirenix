@@ -14,6 +14,7 @@ const SWEEP_WINDOW = 6;
 export const failedBreakout: Strategy = {
   key: 'failed-breakout',
   label: 'Failed Breakout',
+  bias: 'reversion',
   regimes: ['RANGE', 'CHOP', 'TREND', 'EXTREME_VOLATILITY'],
 
   evaluate(context): StrategyCandidate | null {

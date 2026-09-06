@@ -11,6 +11,7 @@ import type { Strategy, StrategyCandidate } from '../types';
 export const trendPullback: Strategy = {
   key: 'trend-pullback',
   label: 'Trend Pullback',
+  bias: 'continuation',
   regimes: ['TREND', 'BREAKOUT'],
 
   evaluate(context): StrategyCandidate | null {

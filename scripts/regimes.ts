@@ -1,6 +1,7 @@
 /** How much of the session each market regime accounts for. */
+import { loadHistory } from './data';
 import { CANDLE_DEPTH, INSTRUMENTS, TIMEFRAME_ROLES, type Regime, type TimeframeRole } from '@/lib/config';
-import { loadBacktestData } from '@/lib/backtest/engine';
+
 import { closedBefore, type Candle } from '@/lib/market/candles';
 import { buildContext, decide } from '@/lib/strategy';
 
@@ -9,7 +10,7 @@ const window = (series: Candle[], size: number) => (series.length > size ? serie
 
 async function main() {
   for (const instrument of INSTRUMENTS) {
-    const { decimals, candles } = await loadBacktestData(instrument, days);
+    const { decimals, candles } = await loadHistory(instrument, days);
     const entryCandles = candles.entry;
     const start = Math.max(CANDLE_DEPTH.entry, entryCandles.length - days * 1440);
 

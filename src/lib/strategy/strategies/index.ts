@@ -4,6 +4,7 @@ import { failedBreakout } from './failedBreakout';
 import { meanReversion } from './meanReversion';
 import { momentum } from './momentum';
 import { openingRange } from './openingRange';
+import { pullbackFade } from './pullbackFade';
 import { srBounce } from './srBounce';
 import { trendPullback } from './trendPullback';
 import { vwapPullback } from './vwapPullback';
@@ -11,6 +12,7 @@ import { vwapPullback } from './vwapPullback';
 /** Every setup the system knows how to recognise. */
 export const STRATEGIES: Strategy[] = [
   trendPullback,
+  pullbackFade,
   breakoutRetest,
   momentum,
   vwapPullback,

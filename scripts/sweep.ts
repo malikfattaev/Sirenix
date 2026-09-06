@@ -4,7 +4,8 @@
  * Usage: npx tsx --env-file=.env.local scripts/sweep.ts <days> <field=a,b,c> ...
  */
 import { DEFAULT_TUNING, INSTRUMENTS, type StrategyTuning } from '@/lib/config';
-import { loadBacktestData, replay, type BacktestData, type BacktestResult } from '@/lib/backtest/engine';
+import { loadHistory } from './data';
+import { replay, type BacktestData, type BacktestResult } from '@/lib/backtest/engine';
 
 const days = Number(process.argv[2] ?? 6);
 const overrides = process.argv.slice(3).map((argument) => {
@@ -39,7 +40,7 @@ async function main() {
   const data = new Map<string, BacktestData>();
 
   for (const instrument of INSTRUMENTS) {
-    const loaded = await loadBacktestData(instrument, days);
+    const loaded = await loadHistory(instrument, days);
     data.set(instrument.id, loaded);
     const trigger = loaded.candles.entry;
     console.log(

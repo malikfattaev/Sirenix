@@ -14,6 +14,7 @@ const BURST_BARS = 3;
 export const momentum: Strategy = {
   key: 'momentum',
   label: 'Momentum',
+  bias: 'continuation',
   regimes: ['BREAKOUT', 'TREND', 'EXTREME_VOLATILITY'],
 
   evaluate(context): StrategyCandidate | null {

@@ -91,7 +91,8 @@ export type StrategyKey =
   | 'sr-bounce'
   | 'mean-reversion'
   | 'failed-breakout'
-  | 'opening-range';
+  | 'opening-range'
+  | 'pullback-fade';
 
 /**
  * Tie-breaker order when several strategies fire at once. The lists differ per
@@ -99,6 +100,7 @@ export type StrategyKey =
  */
 export const STRATEGY_PRIORITY: Record<string, StrategyKey[]> = {
   GOLD: [
+    'pullback-fade',
     'trend-pullback',
     'vwap-pullback',
     'breakout-retest',
@@ -109,6 +111,7 @@ export const STRATEGY_PRIORITY: Record<string, StrategyKey[]> = {
     'mean-reversion',
   ],
   BRENT: [
+    'pullback-fade',
     'trend-pullback',
     'breakout-retest',
     'momentum',
@@ -164,6 +167,11 @@ export interface StrategyTuning {
   maxHoldMinutes: number;
   /** Bars to stand aside after a trade closes, so one move is traded once. */
   cooldownBars: number;
+  /**
+   * Setups allowed to fire. `null` means all of them; a list restricts the
+   * system to the strategies that have earned their place on this instrument.
+   */
+  enabledStrategies: StrategyKey[] | null;
 }
 
 export const DEFAULT_TUNING: StrategyTuning = {
@@ -178,6 +186,19 @@ export const DEFAULT_TUNING: StrategyTuning = {
   maxTargetAtr: 1.8,
   maxHoldMinutes: 20,
   cooldownBars: 5,
+  /**
+   * Trend pullback, S/R bounce, VWAP pullback and failed breakout lost money in
+   * all four independent measurements (both instruments x both halves of a
+   * 21-day sample), so they are off by default. They are still in the codebase:
+   * re-enable one here and run `scripts/lab.ts` to re-test it on fresh data.
+   */
+  enabledStrategies: [
+    'breakout-retest',
+    'momentum',
+    'pullback-fade',
+    'mean-reversion',
+    'opening-range',
+  ],
 };
 
 /** How long a live signal stays on the board before it is marked expired. */

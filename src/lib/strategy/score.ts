@@ -1,4 +1,10 @@
-import type { ScoreComponent, MarketContext, StrategyCandidate, TradePlan } from './types';
+import type {
+  ScoreComponent,
+  MarketContext,
+  StrategyBias,
+  StrategyCandidate,
+  TradePlan,
+} from './types';
 import { clamp, entryConfirmation, nearestLevel, plateau, sign, trendVote } from './strategies/shared';
 import { DEFAULT_TUNING, type StrategyTuning } from '@/lib/config';
 
@@ -12,25 +18,37 @@ import { DEFAULT_TUNING, type StrategyTuning } from '@/lib/config';
 export function scoreSetup(
   context: MarketContext,
   candidate: StrategyCandidate,
+  bias: StrategyBias,
   plan: TradePlan | null,
   tuning: StrategyTuning = DEFAULT_TUNING,
 ): { score: number; components: ScoreComponent[] } {
   const { direction: higher, setup, entry, context: hourly } = context.views;
   const s = sign(candidate.direction);
 
-  const directionVote = s * trendVote(higher);
-  const setupVote = s * trendVote(setup);
-  const hourlyVote = s * trendVote(hourly);
+  /**
+   * A continuation setup is graded on how much a timeframe agrees with it; a
+   * reversion setup on how much there is to trade against. Both land in 0-1.
+   */
+  const grade = (vote: number) =>
+    bias === 'continuation' ? clamp((s * vote + 1) / 2, 0, 1) : clamp(Math.abs(vote), 0, 1);
 
-  // Structure on the setup frame, softened when the higher frame disagrees.
+  const directionVote = grade(trendVote(higher));
+  const setupVote = grade(trendVote(setup));
+  const hourlyVote = grade(trendVote(hourly));
+
   const wanted = candidate.direction === 'LONG' ? 'up' : 'down';
-  const structureValue =
-    setup.structure === wanted ? 1 : setup.structure === 'range' ? 0.5 : 0.1;
+  const aligned = setup.structure === wanted ? 1 : setup.structure === 'range' ? 0.5 : 0.1;
+  const structureValue = bias === 'continuation' ? aligned : 1 - aligned + 0.1;
 
+  // Continuation wants price on its own side of VWAP; a fade wants it stretched
+  // away from VWAP, which is exactly what it expects to be given back.
+  const vwapDistance = context.vwap === null ? null : (s * (context.price - context.vwap)) / setup.atr;
   const vwapValue =
-    context.vwap === null
+    vwapDistance === null
       ? 0.5
-      : plateau((s * (context.price - context.vwap)) / setup.atr, -1.6, -0.2, 1.6, 3.5);
+      : bias === 'continuation'
+        ? plateau(vwapDistance, -1.6, -0.2, 1.6, 3.5)
+        : plateau(-vwapDistance, 0.1, 0.8, 3.0, 5.0);
 
   const emaValue = clamp(Math.abs(setup.ema9 - setup.ema20) / (0.8 * setup.atr), 0, 1);
 
@@ -51,8 +69,12 @@ export function scoreSetup(
     ? clamp(Math.abs(blocking.price - context.price) / (1.2 * setup.atr), 0.2, 1)
     : 1;
 
+  // Continuation wants momentum behind it; a fade wants the other side exhausted.
   const relativeRsi = candidate.direction === 'LONG' ? setup.rsi : 100 - setup.rsi;
-  const momentumValue = plateau(relativeRsi, 25, 45, 72, 88);
+  const momentumValue =
+    bias === 'continuation'
+      ? plateau(relativeRsi, 25, 45, 72, 88)
+      : plateau(relativeRsi, 5, 15, 45, 62);
 
   const volatilityValue =
     plateau(entry.atrRatio, 0.45, 0.8, 1.6, 2.4) * plateau(setup.atrPercent, 0.005, 0.02, 0.6, 1.6);
@@ -66,8 +88,8 @@ export function scoreSetup(
     : 0.4;
 
   const components: ScoreComponent[] = [
-    { key: 'direction15m', label: '15m direction', weight: 12, value: clamp((directionVote + 1) / 2, 0, 1) },
-    { key: 'trend5m', label: '5m trend', weight: 12, value: clamp((setupVote + 1) / 2, 0, 1) },
+    { key: 'direction15m', label: '15m direction', weight: 12, value: directionVote },
+    { key: 'trend5m', label: '5m trend', weight: 12, value: setupVote },
     { key: 'confirm1m', label: '1m confirmation', weight: 12, value: entryConfirmation(entry, candidate.direction) },
     { key: 'structure', label: 'Market structure', weight: 9, value: structureValue },
     { key: 'vwap', label: 'VWAP', weight: 9, value: vwapValue },
@@ -78,7 +100,7 @@ export function scoreSetup(
     { key: 'entry', label: 'Entry quality', weight: 10, value: entryValue },
     { key: 'riskReward', label: 'Risk / reward', weight: 8, value: riskRewardValue },
     { key: 'setup', label: 'Setup quality', weight: 14, value: candidate.quality },
-    { key: 'context1h', label: '1H context', weight: 5, value: clamp((hourlyVote + 1) / 2, 0, 1) },
+    { key: 'context1h', label: '1H context', weight: 5, value: hourlyVote },
   ];
 
   const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);

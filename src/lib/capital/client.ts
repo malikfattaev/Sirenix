@@ -17,8 +17,11 @@ const BASE_URLS = {
 const MAX_CANDLES_PER_REQUEST = 1000;
 /** Sessions expire after 10 minutes; renew early to avoid racing the boundary. */
 const SESSION_TTL_MS = 8 * 60_000;
-/** The API allows 10 requests/second — stay comfortably under it. */
+/** The API allows 10 requests/second; stay comfortably under it. */
 const MIN_REQUEST_INTERVAL_MS = 130;
+/** Backoff when the server rate-limits us anyway, e.g. under a heavy backtest. */
+const RATE_LIMIT_RETRIES = 4;
+const RATE_LIMIT_BACKOFF_MS = 1_500;
 
 interface Session {
   cst: string;
@@ -141,7 +144,7 @@ class CapitalClient {
     return this.sessionPromise;
   }
 
-  private async request<T>(path: string, retryOnAuthFailure = true): Promise<T> {
+  private async request<T>(path: string, retryOnAuthFailure = true, attempt = 0): Promise<T> {
     const { apiKey, baseUrl } = readCredentials();
     const session = await this.getSession();
 
@@ -159,6 +162,12 @@ class CapitalClient {
     if (response.status === 401 && retryOnAuthFailure) {
       await this.getSession(true);
       return this.request<T>(path, false);
+    }
+
+    // Backing off and retrying beats failing a whole backtest on one 429.
+    if (response.status === 429 && attempt < RATE_LIMIT_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_BACKOFF_MS * 2 ** attempt));
+      return this.request<T>(path, retryOnAuthFailure, attempt + 1);
     }
 
     const body = (await response.json().catch(() => ({}))) as T & CapitalErrorBody;

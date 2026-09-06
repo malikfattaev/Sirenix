@@ -3,8 +3,9 @@
  * the spread across the trading day.
  * Usage: npx tsx --env-file=.env.local scripts/frequency.ts <days>
  */
+import { loadHistory } from './data';
 import { CANDLE_DEPTH, DEFAULT_TUNING, INSTRUMENTS, type TimeframeRole } from '@/lib/config';
-import { loadBacktestData } from '@/lib/backtest/engine';
+
 import { closedBefore, type Candle } from '@/lib/market/candles';
 import { buildContext, decide } from '@/lib/strategy';
 
@@ -14,7 +15,7 @@ const HOUR_MS = 3_600_000;
 
 async function main() {
   for (const instrument of INSTRUMENTS) {
-    const { decimals, candles } = await loadBacktestData(instrument, days);
+    const { decimals, candles } = await loadHistory(instrument, days);
     const entryCandles = candles.entry;
     const start = Math.max(CANDLE_DEPTH.entry, entryCandles.length - days * 1440);
 

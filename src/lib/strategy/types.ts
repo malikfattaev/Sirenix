@@ -76,9 +76,17 @@ export interface StrategyCandidate {
   reasons: string[];
 }
 
+/**
+ * Whether a setup joins the prevailing move or trades against it. Scoring has
+ * to know: a fade needs a trend to be *present*, not to agree with it, so
+ * grading both kinds on trend agreement silently rejects every fade.
+ */
+export type StrategyBias = 'continuation' | 'reversion';
+
 export interface Strategy {
   key: StrategyKey;
   label: string;
+  bias: StrategyBias;
   /** Regimes this strategy is allowed to fire in. */
   regimes: Regime[];
   evaluate(context: MarketContext): StrategyCandidate | null;

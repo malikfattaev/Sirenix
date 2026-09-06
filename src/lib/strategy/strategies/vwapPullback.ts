@@ -10,6 +10,7 @@ import type { Strategy, StrategyCandidate } from '../types';
 export const vwapPullback: Strategy = {
   key: 'vwap-pullback',
   label: 'VWAP Pullback',
+  bias: 'continuation',
   regimes: ['TREND', 'RANGE', 'BREAKOUT'],
 
   evaluate(context): StrategyCandidate | null {

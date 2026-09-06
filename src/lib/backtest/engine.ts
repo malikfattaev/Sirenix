@@ -65,6 +65,12 @@ export interface BacktestResult {
 export interface BacktestOptions {
   days: number;
   tuning?: StrategyTuning;
+  /**
+   * Fraction of the replay window to cover, as [start, end] in 0..1. Used to
+   * split history into a part settings are chosen on and a part they are
+   * checked against, so a good result cannot just be a fitted one.
+   */
+  sample?: [number, number];
 }
 
 /** Candles per calendar day for each timeframe, used to size the download. */
@@ -77,10 +83,10 @@ const BARS_PER_DAY: Record<TimeframeRole, number> = {
 
 /** Per-role download ceiling, so one run never turns into hundreds of requests. */
 const MAX_BARS: Record<TimeframeRole, number> = {
-  entry: 12000,
-  setup: 4000,
-  direction: 2000,
-  context: 800,
+  entry: 30000,
+  setup: 8000,
+  direction: 3000,
+  context: 1000,
 };
 
 export interface BacktestData {
@@ -125,21 +131,24 @@ export async function loadBacktestData(
 export function replay(
   instrument: InstrumentConfig,
   { decimals, candles }: BacktestData,
-  { days, tuning = DEFAULT_TUNING }: BacktestOptions,
+  { days, tuning = DEFAULT_TUNING, sample = [0, 1] }: BacktestOptions,
 ): BacktestResult {
   const entryCandles = candles.entry;
   const barMs = TIMEFRAME_MS[TIMEFRAME_ROLES.entry];
   const maxHoldBars = Math.ceil((tuning.maxHoldMinutes * 60_000) / barMs);
-  const start = Math.max(
+  const windowStart = Math.max(
     CANDLE_DEPTH.entry,
     entryCandles.length - Math.ceil(days * BARS_PER_DAY.entry),
   );
+  const span = entryCandles.length - windowStart;
+  const start = windowStart + Math.floor(span * sample[0]);
+  const end = windowStart + Math.floor(span * sample[1]);
 
   const trades: BacktestTrade[] = [];
   let barsTested = 0;
   let nextEligibleBar = start;
 
-  for (let i = start; i < entryCandles.length - 1; i += 1) {
+  for (let i = start; i < end - 1; i += 1) {
     if (i < nextEligibleBar) continue;
     barsTested += 1;
 
@@ -182,7 +191,7 @@ export function replay(
     nextEligibleBar = exitIndex + tuning.cooldownBars;
   }
 
-  return summarise(instrument, entryCandles, start, barsTested, trades);
+  return summarise(instrument, entryCandles, start, end, barsTested, trades);
 }
 
 /** Keeps the analysis window bounded so every bar costs the same to evaluate. */
@@ -256,6 +265,7 @@ function summarise(
   instrument: InstrumentConfig,
   entryCandles: Candle[],
   start: number,
+  end: number,
   barsTested: number,
   trades: BacktestTrade[],
 ): BacktestResult {
@@ -286,7 +296,7 @@ function summarise(
     instrumentId: instrument.id,
     label: instrument.label,
     from: entryCandles[start]?.time ?? 0,
-    to: entryCandles[entryCandles.length - 1]?.closeTime ?? 0,
+    to: entryCandles[end - 1]?.closeTime ?? 0,
     barsTested,
     signals: trades.length,
     wins: wins.length,

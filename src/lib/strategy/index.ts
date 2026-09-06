@@ -65,7 +65,11 @@ export function decide(
     return empty('Choppy market, standing aside', [context.regimeReason]);
   }
 
-  const eligible = STRATEGIES.filter((strategy) => strategy.regimes.includes(context.regime));
+  const eligible = STRATEGIES.filter(
+    (strategy) =>
+      strategy.regimes.includes(context.regime) &&
+      (tuning.enabledStrategies === null || tuning.enabledStrategies.includes(strategy.key)),
+  );
   const rejections: string[] = [];
   const evaluated: Evaluated[] = [];
 
@@ -79,10 +83,11 @@ export function decide(
       rejections.push(`${strategy.label}: move already happened (${chased.toFixed(1)} ATR past entry)`);
       continue;
     }
-    // A 1H move straight against us is the one veto the hourly frame gets.
+    // A 1H move straight against us vetoes a continuation setup. A fade is
+    // meant to trade against the move, so the veto does not apply to it.
     const hourly = context.views.context;
     const against = sign(candidate.direction) * (hourly.close - hourly.ema20);
-    if (against < -1.5 * hourly.atr) {
+    if (strategy.bias === 'continuation' && against < -1.5 * hourly.atr) {
       rejections.push(`${strategy.label}: 1H is moving hard the other way`);
       continue;
     }
@@ -93,7 +98,7 @@ export function decide(
       continue;
     }
 
-    const { score, components } = scoreSetup(context, candidate, plan.plan, tuning);
+    const { score, components } = scoreSetup(context, candidate, strategy.bias, plan.plan, tuning);
     if (score < tuning.minScore) {
       rejections.push(`${strategy.label}: confluence ${score}/100`);
       continue;

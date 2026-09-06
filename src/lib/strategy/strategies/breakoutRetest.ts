@@ -15,6 +15,7 @@ const RETEST_WINDOW = 10;
 export const breakoutRetest: Strategy = {
   key: 'breakout-retest',
   label: 'Breakout + Retest',
+  bias: 'continuation',
   regimes: ['BREAKOUT', 'TREND'],
 
   evaluate(context): StrategyCandidate | null {
