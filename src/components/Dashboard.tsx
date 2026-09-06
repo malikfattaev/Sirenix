@@ -1,52 +1,74 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { REFRESH_INTERVAL_MS } from '@/lib/config';
+import { PRICE_REFRESH_INTERVAL_MS, SIGNAL_REFRESH_INTERVAL_MS } from '@/lib/config';
 import type { SignalRecord } from '@/lib/db';
+import type { Quote } from '@/lib/quotes';
 import type { Signal } from '@/lib/strategy/types';
 import { BacktestPanel } from './BacktestPanel';
 import { HistoryTable } from './HistoryTable';
 import { SignalCard } from './SignalCard';
 
+/**
+ * Runs two independent loops on purpose: quotes tick every second, while the
+ * full multi-timeframe analysis only has new candles to read once a minute.
+ */
+function usePoll(task: () => Promise<void>, intervalMs: number) {
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = async () => {
+      await task();
+      if (active) timer = setTimeout(tick, intervalMs);
+    };
+    timer = setTimeout(tick, 0);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [task, intervalMs]);
+}
+
 export function Dashboard() {
   const [signals, setSignals] = useState<Signal[]>([]);
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [history, setHistory] = useState<SignalRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refreshQuotes = useCallback(async () => {
+    try {
+      const response = await fetch('/api/prices', { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? 'Could not load prices');
+      setQuotes(
+        Object.fromEntries((body.quotes as Quote[]).map((quote) => [quote.instrumentId, quote])),
+      );
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load prices');
+    }
+  }, []);
+
+  const refreshSignals = useCallback(async () => {
     try {
       const [signalsResponse, historyResponse] = await Promise.all([
         fetch('/api/signals', { cache: 'no-store' }),
         fetch('/api/history?limit=20', { cache: 'no-store' }),
       ]);
-      const signalsBody = await signalsResponse.json();
-      if (!signalsResponse.ok) throw new Error(signalsBody.error ?? 'Could not load signals');
+      const body = await signalsResponse.json();
+      if (!signalsResponse.ok) throw new Error(body.error ?? 'Could not load signals');
 
-      setSignals(signalsBody.signals);
-      setError(null);
+      setSignals(body.signals);
       if (historyResponse.ok) setHistory((await historyResponse.json()).signals);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load signals');
     }
   }, []);
 
-  // Self-scheduling poll rather than setInterval: a slow round trip delays the
-  // next request instead of stacking another one on top of it.
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-
-    const poll = async () => {
-      await refresh();
-      if (active) timer = setTimeout(poll, REFRESH_INTERVAL_MS);
-    };
-    timer = setTimeout(poll, 0);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [refresh]);
+  usePoll(refreshQuotes, PRICE_REFRESH_INTERVAL_MS);
+  usePoll(refreshSignals, SIGNAL_REFRESH_INTERVAL_MS);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
@@ -63,9 +85,15 @@ export function Dashboard() {
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {signals.length === 0 && !error
           ? [0, 1].map((index) => (
-              <div key={index} className="h-80 animate-pulse rounded-xl border border-edge bg-surface" />
+              <div key={index} className="h-64 animate-pulse rounded-xl border border-edge bg-surface" />
             ))
-          : signals.map((signal) => <SignalCard key={signal.instrumentId} signal={signal} />)}
+          : signals.map((signal) => (
+              <SignalCard
+                key={signal.instrumentId}
+                signal={signal}
+                quote={quotes[signal.instrumentId]}
+              />
+            ))}
       </div>
 
       <section className="mt-10">

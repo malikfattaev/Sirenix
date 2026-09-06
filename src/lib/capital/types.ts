@@ -41,6 +41,10 @@ export interface CapitalMarketDetails {
   snapshot: CapitalSnapshot;
 }
 
+export interface CapitalMarketsResponse {
+  marketDetails: CapitalMarketDetails[];
+}
+
 export interface CapitalErrorBody {
   errorCode?: string;
 }

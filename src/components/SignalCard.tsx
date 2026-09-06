@@ -1,3 +1,7 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import type { Quote } from '@/lib/quotes';
 import type { Signal } from '@/lib/strategy/types';
 import { price, regimeLabel, time } from './format';
 
@@ -6,6 +10,25 @@ const TONE = {
   SHORT: { dot: '🔴', text: 'text-short', ring: 'ring-short/30', bar: 'bg-short' },
   WAIT: { dot: '⚪', text: 'text-wait', ring: 'ring-edge', bar: 'bg-wait' },
 } as const;
+
+/** How long the price stays tinted after a tick. */
+const FLASH_MS = 450;
+
+/** Tints the price green or red for a moment on every change, as a broker would. */
+function useTickDirection(value: number): 'up' | 'down' | null {
+  const previous = useRef(value);
+  const [direction, setDirection] = useState<'up' | 'down' | null>(null);
+
+  useEffect(() => {
+    if (value === previous.current) return;
+    setDirection(value > previous.current ? 'up' : 'down');
+    previous.current = value;
+    const timer = setTimeout(() => setDirection(null), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [value]);
+
+  return direction;
+}
 
 function Row({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
@@ -16,9 +39,20 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
   );
 }
 
-export function SignalCard({ signal }: { signal: Signal }) {
+export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote }) {
   const tone = TONE[signal.type];
-  const { plan, decimals } = signal;
+  const { plan } = signal;
+
+  // The quote loop is a second old at most; the analysis loop may be fifteen.
+  const decimals = quote?.decimals ?? signal.decimals;
+  const current = quote?.price ?? signal.price;
+  const bid = quote?.bid ?? signal.bid;
+  const ask = quote?.ask ?? signal.ask;
+  const spread = quote?.spread ?? signal.spread;
+  const updatedAt = quote?.updatedAt ?? signal.updatedAt;
+
+  const tick = useTickDirection(current);
+  const tickTone = tick === 'up' ? 'text-long' : tick === 'down' ? 'text-short' : '';
 
   return (
     <section className={`rounded-xl border border-edge bg-surface p-5 ring-1 ${tone.ring}`}>
@@ -31,10 +65,11 @@ export function SignalCard({ signal }: { signal: Signal }) {
           </p>
         </div>
         <div className="text-right">
-          <div className="tabular text-2xl font-semibold">{price(signal.price, decimals)}</div>
+          <div className={`tabular text-2xl font-semibold transition-colors duration-150 ${tickTone}`}>
+            {price(current, decimals)}
+          </div>
           <div className="tabular text-[11px] text-muted">
-            {price(signal.bid, decimals)} / {price(signal.ask, decimals)} · spread{' '}
-            {price(signal.spread, decimals)}
+            {price(bid, decimals)} / {price(ask, decimals)} · spread {price(spread, decimals)}
           </div>
         </div>
       </header>
@@ -59,7 +94,7 @@ export function SignalCard({ signal }: { signal: Signal }) {
         <div className="mt-4 divide-y divide-edge border-y border-edge">
           <Row
             label="Entry"
-            value={`${price(plan.entryLow, decimals)} – ${price(plan.entryHigh, decimals)}`}
+            value={`${price(plan.entryLow, decimals)} / ${price(plan.entryHigh, decimals)}`}
           />
           <Row label="Stop Loss" value={price(plan.stopLoss, decimals)} accent="text-short" />
           <Row
@@ -67,7 +102,7 @@ export function SignalCard({ signal }: { signal: Signal }) {
             value={
               plan.takeProfit2 === null
                 ? price(plan.takeProfit, decimals)
-                : `${price(plan.takeProfit, decimals)} → ${price(plan.takeProfit2, decimals)}`
+                : `${price(plan.takeProfit, decimals)} / ${price(plan.takeProfit2, decimals)}`
             }
             accent="text-long"
           />
@@ -81,7 +116,7 @@ export function SignalCard({ signal }: { signal: Signal }) {
 
       <footer className="mt-4 flex justify-between text-[11px] text-muted">
         <span>VWAP {price(signal.vwap, decimals)}</span>
-        <span>Updated {time(signal.updatedAt)}</span>
+        <span>{time(updatedAt)}</span>
       </footer>
     </section>
   );

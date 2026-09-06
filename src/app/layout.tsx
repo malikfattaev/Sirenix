@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Sirenix — GOLD & BRENT',
+  title: 'Sirenix',
   description: 'Scalping analysis for GOLD and BRENT OIL from live Capital.com market data.',
 };
 

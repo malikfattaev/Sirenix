@@ -41,7 +41,7 @@ export function buildPlan(
     stopReason = `Stop ${format(round(stopLoss))} widened to clear noise and spread`;
   }
   if (risk > maxRisk) {
-    return { ok: false, detail: `Invalidation is ${(risk / setup.atr).toFixed(1)} ATR away — too wide to scalp` };
+    return { ok: false, detail: `Invalidation is ${(risk / setup.atr).toFixed(1)} ATR away, too wide to scalp` };
   }
 
   // --- Targets -------------------------------------------------------------
@@ -79,8 +79,8 @@ export function buildPlan(
         ? 'no target in front of price'
         : Math.abs(nearest - price) < minReward
           ? `nearest target only pays 1:${(Math.abs(nearest - price) / risk).toFixed(1)}`
-          : `nearest target is ${(Math.abs(nearest - price) / setup.atr).toFixed(1)} ATR away — too far to scalp`;
-    return { ok: false, detail: `Not enough room — ${shortfall}` };
+          : `nearest target is ${(Math.abs(nearest - price) / setup.atr).toFixed(1)} ATR away, too far to scalp`;
+    return { ok: false, detail: `Not enough room: ${shortfall}` };
   }
 
   const takeProfit2 = ahead.find((value) => s * (value - takeProfit) > 0.3 * setup.atr) ?? null;

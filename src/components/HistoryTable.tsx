@@ -12,7 +12,7 @@ export function HistoryTable({ signals }: { signals: SignalRecord[] }) {
   if (signals.length === 0) {
     return (
       <p className="rounded-xl border border-edge bg-surface p-5 text-sm text-muted">
-        No signals recorded yet — they appear here as soon as a setup fires.
+        No signals recorded yet. They appear here as soon as a setup fires.
       </p>
     );
   }

@@ -22,7 +22,7 @@ export function detectRegime(views: Views): RegimeRead {
   if (setup.atrRatio >= REGIME.extremeAtrRatio) {
     return {
       regime: 'EXTREME_VOLATILITY',
-      reason: `Volatility spike — 5m ATR is ${setup.atrRatio.toFixed(1)}x its normal level`,
+      reason: `Volatility spike: 5m ATR is ${setup.atrRatio.toFixed(1)}x its normal level`,
     };
   }
 
@@ -41,16 +41,16 @@ export function detectRegime(views: Views): RegimeRead {
   if (separation >= REGIME.trendSeparationAtr && direction.structure !== 'range') {
     return {
       regime: 'TREND',
-      reason: `Trending — 5m EMA9/50 spread ${separation.toFixed(1)} ATR, 15m structure ${direction.structure}`,
+      reason: `Trending: 5m EMA9/50 spread ${separation.toFixed(1)} ATR, 15m structure ${direction.structure}`,
     };
   }
 
   if (separation <= REGIME.rangeSeparationAtr && rangeHeight <= REGIME.compressionAtr * 2) {
     return {
       regime: 'RANGE',
-      reason: `Ranging — flat 5m EMAs inside a ${rangeHeight.toFixed(1)} ATR band`,
+      reason: `Ranging: flat 5m EMAs inside a ${rangeHeight.toFixed(1)} ATR band`,
     };
   }
 
-  return { regime: 'CHOP', reason: 'No clean trend or range — conditions are choppy' };
+  return { regime: 'CHOP', reason: 'No clean trend or range, conditions are choppy' };
 }

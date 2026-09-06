@@ -1,39 +1,28 @@
-import { capital } from '@/lib/capital/client';
-import {
-  CANDLE_DEPTH,
-  INSTRUMENTS,
-  TIMEFRAME_ROLES,
-  type InstrumentConfig,
-  type TimeframeRole,
-} from '@/lib/config';
+import { INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
-import { toCandles, type Candle } from '@/lib/market/candles';
+import { getCandles } from '@/lib/market/candleCache';
+import { getQuotes, type Quote } from '@/lib/quotes';
 import { buildContext, decide, type Signal } from '@/lib/strategy';
 
 /**
  * Produces the current signal for one instrument and files it in the history.
  *
- * Everything downstream of the API lives here: fetch, analyse, decide, then
- * settle any earlier signal against the candles that have printed since.
+ * Both inputs are cached upstream: quotes for a fraction of a second, candles
+ * until a new one-minute bar closes. That keeps this cheap enough to run on
+ * every poll, so the plan is always priced off the latest quote.
  */
-export async function analyseInstrument(instrument: InstrumentConfig): Promise<Signal> {
-  const [market, raw] = await Promise.all([
-    capital.getMarket(instrument.epic),
-    capital.getCandlesForRoles(instrument.epic, TIMEFRAME_ROLES, CANDLE_DEPTH),
-  ]);
-
+export async function analyseInstrument(
+  instrument: InstrumentConfig,
+  quote: Quote | undefined,
+): Promise<Signal> {
+  const candles = await getCandles(instrument);
   const now = Date.now();
-  const candles = Object.fromEntries(
-    (Object.keys(TIMEFRAME_ROLES) as TimeframeRole[]).map((role) => [
-      role,
-      toCandles(raw[role], TIMEFRAME_ROLES[role], now),
-    ]),
-  ) as Record<TimeframeRole, Candle[]>;
-
-  const { bid, offer, decimalPlacesFactor: decimals, marketStatus } = market.snapshot;
   const lastCandle = candles.entry[candles.entry.length - 1];
-  const price = bid !== null && offer !== null ? (bid + offer) / 2 : (lastCandle?.close ?? 0);
-  const spread = bid !== null && offer !== null ? offer - bid : (lastCandle?.spread ?? 0);
+
+  const price = quote?.price || lastCandle?.close || 0;
+  const spread = quote?.spread ?? lastCandle?.spread ?? 0;
+  const decimals = quote?.decimals ?? 2;
+  const marketStatus = quote?.marketStatus ?? 'CLOSED';
 
   resolveOpenSignals(instrument.id, candles.entry, now);
 
@@ -42,8 +31,8 @@ export async function analyseInstrument(instrument: InstrumentConfig): Promise<S
     epic: instrument.epic,
     label: instrument.label,
     price,
-    bid,
-    ask: offer,
+    bid: quote?.bid ?? null,
+    ask: quote?.ask ?? null,
     spread,
     decimals,
     marketStatus,
@@ -54,8 +43,8 @@ export async function analyseInstrument(instrument: InstrumentConfig): Promise<S
     instrumentId: instrument.id,
     candles,
     price,
-    bid,
-    ask: offer,
+    bid: base.bid,
+    ask: base.ask,
     spread,
     decimals,
     marketStatus,
@@ -73,7 +62,7 @@ export async function analyseInstrument(instrument: InstrumentConfig): Promise<S
       vwap: null,
       plan: null,
       reasons: ['The feed has not returned enough candles for a reliable read'],
-      blockedBy: 'Insufficient data',
+      blockedBy: 'Not enough price history yet',
     };
   }
 
@@ -95,7 +84,11 @@ export async function analyseInstrument(instrument: InstrumentConfig): Promise<S
   return signal;
 }
 
-/** Current signals for every configured instrument. */
-export function analyseAllInstruments(): Promise<Signal[]> {
-  return Promise.all(INSTRUMENTS.map(analyseInstrument));
+/** Current signals for every configured instrument, priced off one quote call. */
+export async function analyseAllInstruments(): Promise<Signal[]> {
+  const quotes = await getQuotes();
+  const byId = new Map(quotes.map((quote) => [quote.instrumentId, quote]));
+  return Promise.all(
+    INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
+  );
 }

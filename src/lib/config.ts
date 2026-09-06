@@ -183,5 +183,12 @@ export const DEFAULT_TUNING: StrategyTuning = {
 /** How long a live signal stays on the board before it is marked expired. */
 export const SIGNAL_LIFETIME_MS = 30 * 60_000;
 
-/** Client polling interval for fresh prices. */
-export const REFRESH_INTERVAL_MS = 15_000;
+/**
+ * Prices are polled far more often than the analysis: quotes move continuously,
+ * while the candles the strategy reads only change once a minute.
+ */
+export const PRICE_REFRESH_INTERVAL_MS = 1_000;
+export const SIGNAL_REFRESH_INTERVAL_MS = 1_000;
+
+/** Server-side quote cache, so extra browser tabs do not multiply upstream calls. */
+export const QUOTE_CACHE_MS = 700;

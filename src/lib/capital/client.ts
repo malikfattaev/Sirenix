@@ -4,6 +4,7 @@ import {
   type CapitalErrorBody,
   type CapitalMarketDetails,
   type CapitalPrice,
+  type CapitalMarketsResponse,
   type CapitalPricesResponse,
 } from './types';
 
@@ -174,6 +175,13 @@ class CapitalClient {
   /** Live snapshot: bid/ask, market status and quoting precision. */
   getMarket(epic: string): Promise<CapitalMarketDetails> {
     return this.request<CapitalMarketDetails>(`/api/v1/markets/${encodeURIComponent(epic)}`);
+  }
+
+  /** Snapshots for several instruments in one request — the cheap price poll. */
+  async getMarkets(epics: string[]): Promise<CapitalMarketDetails[]> {
+    const params = new URLSearchParams({ epics: epics.join(',') });
+    const body = await this.request<CapitalMarketsResponse>(`/api/v1/markets?${params}`);
+    return body.marketDetails ?? [];
   }
 
   /** A single page of candles, optionally ending at `to` (UTC, inclusive). */

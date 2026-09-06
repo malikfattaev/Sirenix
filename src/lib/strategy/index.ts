@@ -62,7 +62,7 @@ export function decide(
     return empty(`Market is ${context.marketStatus.toLowerCase().replace(/_/g, ' ')}`);
   }
   if (context.regime === 'CHOP') {
-    return empty('Choppy market — standing aside', [context.regimeReason]);
+    return empty('Choppy market, standing aside', [context.regimeReason]);
   }
 
   const eligible = STRATEGIES.filter((strategy) => strategy.regimes.includes(context.regime));

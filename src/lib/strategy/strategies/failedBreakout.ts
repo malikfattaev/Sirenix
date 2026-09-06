@@ -51,7 +51,7 @@ export const failedBreakout: Strategy = {
         quality: clamp(0.5 * confirmation + 0.3 * (1 - barsAgo / SWEEP_WINDOW) + 0.2, 0, 1),
         reasons: [
           `Price swept the prior 5m ${sweptHigh ? 'high' : 'low'} and closed back inside`,
-          `The break could not hold — likely a liquidity grab`,
+          `The break could not hold, likely a liquidity grab`,
           `1m momentum turning ${side === 'LONG' ? 'up' : 'down'}`,
         ],
       };

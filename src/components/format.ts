@@ -1,7 +1,7 @@
 /** Formatting helpers shared by the dashboard components. */
 
 export const price = (value: number | null | undefined, decimals: number): string =>
-  value === null || value === undefined ? '—' : value.toFixed(decimals);
+  value === null || value === undefined ? '-' : value.toFixed(decimals);
 
 export const time = (timestamp: number): string =>
   new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
