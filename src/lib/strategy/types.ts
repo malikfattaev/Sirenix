@@ -134,5 +134,10 @@ export interface Signal {
   reasons: string[];
   /** Why the system is standing aside, when it is. */
   blockedBy: string | null;
+  /**
+   * Said about a signal that is already running: how far it has gone and
+   * whether the entry is still there. Null while nothing is running.
+   */
+  note?: string | null;
   updatedAt: number;
 }
