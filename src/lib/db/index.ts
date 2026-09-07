@@ -15,9 +15,9 @@ import type { Signal } from '@/lib/strategy';
  * How a signal ended.
  *
  * EXPIRED means it ran its full holding time and was settled at the market
- * price, so it carries a result. CANCELLED means the strategy behind it was
- * removed before price ever reached the stop or the target, so there is no
- * result to report and pretending otherwise would falsify the record.
+ * price, so it carries a result. CANCELLED is only for a signal that can no
+ * longer be judged at all, because its market is no longer quoted here; a
+ * signal whose strategy was retired still gets followed to its conclusion.
  */
 export type SignalStatus = 'OPEN' | 'WIN' | 'LOSS' | 'EXPIRED' | 'CANCELLED';
 
@@ -42,6 +42,8 @@ export interface SignalRecord {
   /** Realised result in units of risk, once the signal has resolved. */
   resultR: number | null;
   createdAt: number;
+  /** When the signal is settled at market if neither level is reached. */
+  expiresAt: number;
   closedAt: number | null;
 }
 
@@ -66,6 +68,7 @@ interface Row {
   status: SignalStatus;
   result_r: number | null;
   created_at: number;
+  expires_at: number;
   closed_at: number | null;
 }
 
@@ -99,31 +102,62 @@ function db(): Database.Database {
       status         TEXT    NOT NULL DEFAULT 'OPEN',
       result_r       REAL,
       created_at     INTEGER NOT NULL,
+      expires_at     INTEGER NOT NULL DEFAULT 0,
       closed_at      INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_signals_recent ON signals (created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_signals_open ON signals (instrument_id, horizon, status);
   `);
 
-  // A horizon that no longer exists has nothing left to settle its rows, so
-  // they would sit open forever. Mark them cancelled, which says exactly what
-  // happened: the strategy went away before price answered. The rows stay.
-  const horizons = Object.keys(HORIZON_LABEL);
-  const placeholders = horizons.map(() => '?').join(', ');
-  instance
+  migrate(instance);
+  return instance;
+}
+
+/**
+ * Deadlines used to repair rows written before they were stored per signal.
+ * A retired strategy gets the longest of them, so its signals are followed for
+ * at least as long as they were ever meant to run rather than cut short.
+ */
+const RETIRED_LIFETIME_MS = 48 * 60 * 60_000;
+
+function migrate(connection: Database.Database) {
+  const columns = connection.prepare('PRAGMA table_info(signals)').all() as { name: string }[];
+  if (!columns.some((column) => column.name === 'expires_at')) {
+    connection.exec('ALTER TABLE signals ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // Rows written before the deadline was stored: give each the one its horizon
+  // ran under, and a retired horizon the longest, so none is cut short.
+  const lifetime = (horizon: string) =>
+    horizon in SIGNAL_LIFETIME_MS ? SIGNAL_LIFETIME_MS[horizon as Horizon] : RETIRED_LIFETIME_MS;
+  const undated = connection
+    .prepare('SELECT id, horizon, created_at FROM signals WHERE expires_at = 0')
+    .all() as { id: number; horizon: string; created_at: number }[];
+  const setExpiry = connection.prepare('UPDATE signals SET expires_at = ? WHERE id = ?');
+  for (const row of undated) setExpiry.run(row.created_at + lifetime(row.horizon), row.id);
+
+  // A signal whose market is no longer on the board can never be judged, so it
+  // is cancelled. One whose *strategy* was retired still has a live price feed
+  // and keeps running to its stop, its target or its deadline.
+  const tracked = ALL_INSTRUMENTS.map((instrument) => instrument.id);
+  const placeholders = tracked.map(() => '?').join(', ');
+  connection
     .prepare(
       `UPDATE signals SET status = 'CANCELLED', closed_at = ?
-        WHERE status = 'OPEN' AND horizon NOT IN (${placeholders})`,
+        WHERE status = 'OPEN' AND instrument_id NOT IN (${placeholders})`,
     )
-    .run(Date.now(), ...horizons);
+    .run(Date.now(), ...tracked);
 
-  // Earlier builds closed those same rows as EXPIRED, which reads as "held to
-  // the end and settled" and is wrong. A real expiry always records a result.
-  instance
-    .prepare("UPDATE signals SET status = 'CANCELLED' WHERE status = 'EXPIRED' AND result_r IS NULL")
-    .run();
-
-  return instance;
+  // Earlier builds closed rows as EXPIRED or CANCELLED the moment a strategy
+  // was removed, which claimed an outcome that never happened. Reopen the ones
+  // still inside their deadline on a market that is still quoted.
+  connection
+    .prepare(
+      `UPDATE signals SET status = 'OPEN', closed_at = NULL
+        WHERE status IN ('EXPIRED', 'CANCELLED') AND result_r IS NULL
+          AND expires_at > ? AND instrument_id IN (${placeholders})`,
+    )
+    .run(Date.now(), ...tracked);
 }
 
 const toRecord = (row: Row): SignalRecord => ({
@@ -146,6 +180,7 @@ const toRecord = (row: Row): SignalRecord => ({
   status: row.status,
   resultR: row.result_r,
   createdAt: row.created_at,
+  expiresAt: row.expires_at,
   closedAt: row.closed_at,
 });
 
@@ -179,8 +214,8 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       `INSERT INTO signals (
          instrument_id, label, direction, strategy, score, regime, horizon,
          entry, entry_low, entry_high, stop_loss, take_profit, take_profit_2,
-         risk_reward, decimals, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         risk_reward, decimals, created_at, expires_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       signal.instrumentId,
@@ -199,6 +234,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       plan.riskReward,
       signal.decimals,
       signal.updatedAt,
+      signal.updatedAt + SIGNAL_LIFETIME_MS[signal.horizon],
     );
 
   return toRecord(
@@ -216,16 +252,27 @@ export function recordSignal(signal: Signal): SignalRecord | null {
  * Scoped to one horizon because each market carries two signals at once, and
  * each has to be settled on its own candles: a 15-minute bar is too coarse to
  * judge a scalp, and the minute feed is not what the hour-scale trade lives on.
+ *
+ * `includeRetired` sweeps in signals from horizons the app no longer runs. They
+ * still have a live price feed, so they are followed to their stop, their
+ * target or their own recorded deadline rather than abandoned half-answered.
  */
 export function resolveOpenSignals(
   instrumentId: string,
   horizon: Horizon,
   candles: Candle[],
   now: number,
+  includeRetired = false,
 ): number {
+  const live = Object.keys(HORIZON_LABEL);
   const open = db()
-    .prepare(`SELECT * FROM signals WHERE instrument_id = ? AND horizon = ? AND status = 'OPEN'`)
-    .all(instrumentId, horizon) as Row[];
+    .prepare(
+      includeRetired
+        ? `SELECT * FROM signals WHERE instrument_id = ? AND status = 'OPEN'
+             AND (horizon = ? OR horizon NOT IN (${live.map(() => '?').join(', ')}))`
+        : `SELECT * FROM signals WHERE instrument_id = ? AND horizon = ? AND status = 'OPEN'`,
+    )
+    .all(...(includeRetired ? [instrumentId, horizon, ...live] : [instrumentId, horizon])) as Row[];
   if (open.length === 0) return 0;
 
   const update = db().prepare(
@@ -254,8 +301,7 @@ export function resolveOpenSignals(
       }
     }
 
-    const lifetime = SIGNAL_LIFETIME_MS[horizon];
-    if (!outcome && now - row.created_at > lifetime) {
+    if (!outcome && now > row.expires_at) {
       const last = since[since.length - 1];
       if (last) outcome = { status: 'EXPIRED', price: last.close, at: now };
     }

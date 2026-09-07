@@ -109,7 +109,9 @@ export async function analyseAllInstruments(): Promise<Signal[]> {
       INSTRUMENTS.map(async (instrument) => {
         // The 15-minute frame is already loaded for the minute-scale engine.
         const candles = (await getCandles(instrument)).direction;
-        resolveOpenSignals(instrument.id, 'intraday', candles, now);
+        // The 15m pass also carries anything left by a retired strategy: it has
+        // the deepest history, and a coarse bar is the conservative reading.
+        resolveOpenSignals(instrument.id, 'intraday', candles, now, true);
         const signal = analyseIntraday(instrument, candles, byId.get(instrument.id), now);
         recordSignal(signal);
         return signal;
