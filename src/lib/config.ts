@@ -128,36 +128,6 @@ export function findInstrument(id: string): InstrumentConfig | undefined {
   return ALL_INSTRUMENTS.find((instrument) => instrument.id.toLowerCase() === id.toLowerCase());
 }
 
-/**
- * The daily mean-reversion signal on gold and oil.
- *
- * A sharp two-day move that leaves price stretched from its hourly mean tends
- * to be partly given back. Settled by a grid search over 576 configurations
- * that only accepted settings profitable in *both* halves of a nineteen-month
- * sample, measured on gold and Brent alone.
- *
- * Backtest at these values: 312 trades, 70.5% win rate in the first half and
- * 71.2% in the second, positive in both. The edge per trade is small, and a
- * closer target trades away what little there is: the wide stop is what makes
- * the win rate hold up, because this setup routinely overshoots before it
- * turns.
- */
-export const SWING = {
-  /** Hours of price change the fade score is measured over. */
-  lookbackHours: 48,
-  /** Minimum absolute fade score before a signal is issued. */
-  scoreThreshold: 1.3,
-  /** Stop and target as multiples of hourly ATR. Reversion needs a wide stop. */
-  stopAtr: 6,
-  targetAtr: 2,
-  /** Positions are closed at market after this long. */
-  holdHours: 48,
-  /** Hourly candles to load per instrument. */
-  candleDepth: 300,
-  /** Fade score that maps to a displayed strength of 100. */
-  scoreCeiling: 3.0,
-} as const;
-
 export const INDICATORS = {
   emaFast: 9,
   emaMid: 20,
@@ -334,21 +304,11 @@ export const DEFAULT_TUNING: StrategyTuning = {
   ],
 };
 
-/**
- * How long a signal stays open before it is settled at market. A scalp that has
- * not resolved in half an hour is stale; a daily fade is given its full holding
- * period, because overshooting first is exactly how the setup behaves.
- */
-export const SIGNAL_LIFETIME_MS: Record<'scalp' | 'swing', number> = {
-  scalp: 30 * 60_000,
-  swing: SWING.holdHours * 60 * 60_000,
-};
+/** A signal that has not resolved in half an hour is stale and settled at market. */
+export const SIGNAL_LIFETIME_MS = 30 * 60_000;
 
 /** Two signals of the same shape inside this window count as one. */
-export const DEDUPE_WINDOW_MS: Record<'scalp' | 'swing', number> = {
-  scalp: 10 * 60_000,
-  swing: 6 * 60 * 60_000,
-};
+export const DEDUPE_WINDOW_MS = 10 * 60_000;
 
 /**
  * Prices are polled far more often than the analysis: quotes move continuously,

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { runBacktest } from '@/lib/backtest/engine';
-import { runSwingBacktest } from '@/lib/backtest/swing';
 import { INSTRUMENTS, findInstrument } from '@/lib/config';
 
 export const runtime = 'nodejs';
@@ -8,9 +7,8 @@ export const dynamic = 'force-dynamic';
 /** Replaying several days of one-minute candles takes a while. */
 export const maxDuration = 120;
 
-const MAX_DAYS = 210;
-/** The minute-scale replay is far heavier, so it covers a shorter window. */
-const MAX_SCALP_DAYS = 10;
+/** The minute-scale replay pulls thousands of candles per day of history. */
+const MAX_DAYS = 14;
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -24,17 +22,14 @@ export async function GET(request: Request) {
   }
 
   try {
-    const swing = await runSwingBacktest(days);
-
     // Sequential on purpose: each minute-scale run pulls thousands of candles.
-    const scalpDays = Math.min(days, MAX_SCALP_DAYS);
     const results = [];
     for (const instrument of instruments) {
-      const result = await runBacktest(instrument, { days: scalpDays });
+      const result = await runBacktest(instrument, { days });
       // The full trade list is large and unused by the UI.
       results.push({ ...result, trades: undefined });
     }
-    return NextResponse.json({ days, scalpDays, swing, results });
+    return NextResponse.json({ days, results });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error';
     return NextResponse.json({ error: message }, { status: 502 });

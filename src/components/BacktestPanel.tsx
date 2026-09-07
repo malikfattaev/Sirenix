@@ -1,7 +1,6 @@
 'use client';
 
 import type { BacktestResult } from '@/lib/backtest/engine';
-import type { SwingBacktestResult } from '@/lib/backtest/swing';
 
 /** The API strips the trade list, so the panel only ever sees the summary. */
 export type Summary = Omit<BacktestResult, 'trades'>;
@@ -10,11 +9,10 @@ export interface BacktestState {
   days: number;
   loading: boolean;
   error: string | null;
-  swing: SwingBacktestResult | null;
   results: Summary[] | null;
 }
 
-const DAY_OPTIONS = [30, 90, 210];
+const DAY_OPTIONS = [3, 7, 14];
 
 function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -38,7 +36,7 @@ export function BacktestPanel({
   onRun: () => void;
   onSelectDays: (days: number) => void;
 }) {
-  const { days, loading, error, swing, results } = state;
+  const { days, loading, error, results } = state;
 
   return (
     <div className="rounded-xl border border-edge bg-surface p-5">
@@ -77,52 +75,6 @@ export function BacktestPanel({
       </div>
 
       {error && <p className="mt-4 text-[13px] text-short">{error}</p>}
-
-      {swing && (
-        <div className="mt-5 rounded-lg border border-edge bg-surface-raised p-4">
-          <div className="flex items-baseline justify-between">
-            <h4 className="text-[13px] font-semibold tracking-wider text-neutral-300">
-              DAILY REVERSION
-            </h4>
-            <span className="text-[11px] text-muted">
-              {swing.byInstrument.filter((row) => row.totalR > 0).length} of {swing.byInstrument.length} markets positive
-            </span>
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            <Metric label="Signals" value={String(swing.signals)} />
-            <Metric label="Win rate" value={`${swing.winRate}%`} tone={swing.winRate >= 55 ? 'text-long' : ''} />
-            <Metric label="Per trade" value={`${swing.expectancy > 0 ? '+' : ''}${swing.expectancy}R`} tone={swing.expectancy > 0 ? 'text-long' : 'text-short'} />
-            <Metric label="Profit factor" value={swing.profitFactor?.toFixed(2) ?? '-'} />
-            <Metric label="1st half" value={`${swing.firstHalfR > 0 ? '+' : ''}${swing.firstHalfR}R`} tone={swing.firstHalfR > 0 ? 'text-long' : 'text-short'} />
-            <Metric label="2nd half" value={`${swing.secondHalfR > 0 ? '+' : ''}${swing.secondHalfR}R`} tone={swing.secondHalfR > 0 ? 'text-long' : 'text-short'} />
-          </div>
-
-          <table className="mt-4 w-full text-left text-[12px]">
-            <thead className="text-[10px] uppercase tracking-wider text-muted">
-              <tr className="border-b border-edge">
-                <th className="py-2 font-medium">Market</th>
-                <th className="py-2 text-right font-medium">n</th>
-                <th className="py-2 text-right font-medium">Win rate</th>
-                <th className="py-2 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-edge">
-              {swing.byInstrument.map((row) => (
-                <tr key={row.instrumentId}>
-                  <td className="py-2 text-neutral-300">{row.label}</td>
-                  <td className="tabular py-2 text-right text-neutral-400">{row.signals}</td>
-                  <td className="tabular py-2 text-right text-neutral-400">{row.winRate}%</td>
-                  <td className={`tabular py-2 text-right ${row.totalR > 0 ? 'text-long' : 'text-short'}`}>
-                    {row.totalR > 0 ? '+' : ''}
-                    {row.totalR}R
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {results && (
         <div className="mt-5 space-y-5">

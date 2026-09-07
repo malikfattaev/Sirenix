@@ -32,23 +32,17 @@ function usePoll(task: () => Promise<void>, intervalMs: number) {
 }
 
 function Board({
-  title,
-  note,
   signals,
   quotes,
   loading,
 }: {
-  title: string;
-  note?: string;
   signals: Signal[];
   quotes: Record<string, Quote>;
   loading: boolean;
 }) {
   return (
-    <section className="mt-8">
-      <h2 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">{title}</h2>
-      {note && <p className="mt-1 text-[11px] text-muted">{note}</p>}
-      <div className="mt-3 grid gap-4 md:grid-cols-2">
+    <section className="mt-6">
+      <div className="grid gap-4 md:grid-cols-2">
         {loading &&
           [0, 1].map((index) => (
             <div key={index} className="h-64 animate-pulse rounded-xl border border-edge bg-surface" />
@@ -68,16 +62,15 @@ function Board({
 
 export function Dashboard() {
   /** Read inside the replay callback, which must not be recreated per render. */
-  const backtestDays = useRef(210);
+  const backtestDays = useRef(7);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [history, setHistory] = useState<SignalRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [backtest, setBacktest] = useState<BacktestState>({
-    days: 210,
+    days: 7,
     loading: false,
     error: null,
-    swing: null,
     results: null,
   });
 
@@ -89,7 +82,7 @@ export function Dashboard() {
       const response = await fetch(`/api/backtest?days=${backtestDays.current}`);
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? 'Backtest failed');
-      setBacktest((current) => ({ ...current, loading: false, swing: body.swing, results: body.results }));
+      setBacktest((current) => ({ ...current, loading: false, results: body.results }));
     } catch (cause) {
       setBacktest((current) => ({
         ...current,
@@ -137,10 +130,7 @@ export function Dashboard() {
   usePoll(refreshQuotes, PRICE_REFRESH_INTERVAL_MS);
   usePoll(refreshSignals, SIGNAL_REFRESH_INTERVAL_MS);
 
-  // Gold and oil are read on two horizons at once, so each gets its own board.
   const loading = signals.length === 0 && !error;
-  const scalps = signals.filter((signal) => signal.horizon === 'scalp');
-  const daily = signals.filter((signal) => signal.horizon === 'swing');
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
@@ -154,20 +144,7 @@ export function Dashboard() {
         </p>
       )}
 
-      <Board
-        title="SCALPING"
-        note="Minute-scale setups, held for minutes. Headline tone feeds into the score."
-        signals={scalps}
-        quotes={quotes}
-        loading={loading}
-      />
-      <Board
-        title="DAILY REVERSION"
-        note="Fades a stretched two-day move, closed after 48h. Backtest: 71.2% win rate out of sample over 312 trades."
-        signals={daily}
-        quotes={quotes}
-        loading={loading}
-      />
+      <Board signals={signals} quotes={quotes} loading={loading} />
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">RECENT SIGNALS</h2>

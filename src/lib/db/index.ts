@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { ALL_INSTRUMENTS, DEDUPE_WINDOW_MS, SIGNAL_LIFETIME_MS } from '@/lib/config';
 import type { Candle } from '@/lib/market/candles';
-import type { Horizon, Signal } from '@/lib/strategy';
+import type { Signal } from '@/lib/strategy';
 
 export type SignalStatus = 'OPEN' | 'WIN' | 'LOSS' | 'EXPIRED';
 
@@ -15,7 +15,6 @@ export interface SignalRecord {
   strategy: string;
   score: number;
   regime: string;
-  horizon: string;
   entry: number;
   entryLow: number;
   entryHigh: number;
@@ -40,7 +39,6 @@ interface Row {
   strategy: string;
   score: number;
   regime: string;
-  horizon: string;
   entry: number;
   entry_low: number;
   entry_high: number;
@@ -73,7 +71,6 @@ function db(): Database.Database {
       strategy       TEXT    NOT NULL,
       score          INTEGER NOT NULL,
       regime         TEXT    NOT NULL,
-      horizon        TEXT    NOT NULL DEFAULT 'scalp',
       entry          REAL    NOT NULL,
       entry_low      REAL    NOT NULL,
       entry_high     REAL    NOT NULL,
@@ -101,7 +98,6 @@ const toRecord = (row: Row): SignalRecord => ({
   strategy: row.strategy,
   score: row.score,
   regime: row.regime,
-  horizon: row.horizon,
   entry: row.entry,
   entryLow: row.entry_low,
   entryHigh: row.entry_high,
@@ -135,7 +131,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       signal.instrumentId,
       signal.type,
       signal.strategy,
-      signal.updatedAt - DEDUPE_WINDOW_MS[signal.horizon],
+      signal.updatedAt - DEDUPE_WINDOW_MS,
     ) as Row | undefined;
   if (existing) return toRecord(existing);
 
@@ -143,7 +139,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
   const result = db()
     .prepare(
       `INSERT INTO signals (
-         instrument_id, label, direction, strategy, score, regime, horizon,
+         instrument_id, label, direction, strategy, score, regime,
          entry, entry_low, entry_high, stop_loss, take_profit, take_profit_2,
          risk_reward, decimals, created_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -155,7 +151,6 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       signal.strategy,
       signal.score,
       signal.regime,
-      signal.horizon,
       plan.entry,
       plan.entryLow,
       plan.entryHigh,
@@ -179,20 +174,11 @@ export function recordSignal(signal: Signal): SignalRecord | null {
  * levels the stop is assumed to have been hit first, which is the pessimistic
  * reading and keeps the history honest.
  *
- * Scoped to one horizon because gold and oil carry both a minute-scale and a
- * daily signal at once, and each has to be settled on its own candles: hourly
- * bars are far too coarse to judge a scalp, and the minute feed does not reach
- * back far enough to judge a two-day fade.
  */
-export function resolveOpenSignals(
-  instrumentId: string,
-  horizon: Horizon,
-  candles: Candle[],
-  now: number,
-): number {
+export function resolveOpenSignals(instrumentId: string, candles: Candle[], now: number): number {
   const open = db()
-    .prepare(`SELECT * FROM signals WHERE instrument_id = ? AND horizon = ? AND status = 'OPEN'`)
-    .all(instrumentId, horizon) as Row[];
+    .prepare(`SELECT * FROM signals WHERE instrument_id = ? AND status = 'OPEN'`)
+    .all(instrumentId) as Row[];
   if (open.length === 0) return 0;
 
   const update = db().prepare(
@@ -221,7 +207,7 @@ export function resolveOpenSignals(
       }
     }
 
-    const lifetime = SIGNAL_LIFETIME_MS[horizon];
+    const lifetime = SIGNAL_LIFETIME_MS;
     if (!outcome && now - row.created_at > lifetime) {
       const last = since[since.length - 1];
       if (last) outcome = { status: 'EXPIRED', price: last.close, at: now };

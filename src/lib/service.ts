@@ -1,11 +1,9 @@
 import { INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
 import { getCandles } from '@/lib/market/candleCache';
-import { getHourlyCandles } from '@/lib/market/hourlyCache';
 import { getNewsPulse } from '@/lib/news';
 import { getQuotes, type Quote } from '@/lib/quotes';
 import { buildContext, decide, type Signal } from '@/lib/strategy';
-import { analyseSwing } from '@/lib/swing';
 
 /**
  * Produces the current signal for one instrument and files it in the history.
@@ -27,13 +25,12 @@ export async function analyseInstrument(
   const decimals = quote?.decimals ?? 2;
   const marketStatus = quote?.marketStatus ?? 'CLOSED';
 
-  resolveOpenSignals(instrument.id, 'scalp', candles.entry, now);
+  resolveOpenSignals(instrument.id, candles.entry, now);
 
   const base = {
     instrumentId: instrument.id,
     epic: instrument.epic,
     label: instrument.label,
-    horizon: 'scalp' as const,
     price,
     bid: quote?.bid ?? null,
     ask: quote?.ask ?? null,
@@ -91,30 +88,12 @@ export async function analyseInstrument(
   return signal;
 }
 
-/**
- * The whole board. Gold and oil are read twice, on two independent horizons:
- * minute-scale setups, and the daily fade of a stretched two-day move. One
- * quote call prices both.
- */
+/** The whole board: one quote call prices both markets. */
 export async function analyseAllInstruments(): Promise<Signal[]> {
   const quotes = await getQuotes();
   const byId = new Map(quotes.map((quote) => [quote.instrumentId, quote]));
-  const now = Date.now();
 
-  const [scalps, swings] = await Promise.all([
-    Promise.all(
-      INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
-    ),
-    Promise.all(
-      INSTRUMENTS.map(async (instrument) => {
-        const candles = await getHourlyCandles(instrument);
-        resolveOpenSignals(instrument.id, 'swing', candles, now);
-        const signal = analyseSwing(instrument, candles, byId.get(instrument.id), now);
-        recordSignal(signal);
-        return signal;
-      }),
-    ),
-  ]);
-
-  return [...scalps, ...swings];
+  return Promise.all(
+    INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
+  );
 }

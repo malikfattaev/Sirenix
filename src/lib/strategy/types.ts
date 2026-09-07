@@ -109,17 +109,15 @@ export interface TradePlan {
 }
 
 /** Scalps are minutes long; swing signals are held for a day or two. */
-export type Horizon = 'scalp' | 'swing';
 
 export interface Signal {
   instrumentId: string;
   epic: string;
   label: string;
-  horizon: Horizon;
   type: SignalType;
   /** Confluence strength, 0-100. Not a probability of winning. */
   score: number;
-  strategy: StrategyKey | 'daily-reversion' | null;
+  strategy: StrategyKey | null;
   strategyLabel: string | null;
   regime: Regime;
   price: number;
