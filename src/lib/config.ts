@@ -142,6 +142,25 @@ export const REGIME = {
  * — and passed around rather than imported directly — so a backtest can replay
  * the same code with different settings and show whether a change is better.
  */
+/**
+ * How a position is managed once it is open. Placing a stop and a target and
+ * waiting is only one option, and for a scalp usually not the best one.
+ */
+export interface ExitPolicy {
+  /** Move the stop to break-even once price has travelled this many R. */
+  breakEvenAtR: number | null;
+  /** Once in profit, trail the stop this many entry-frame ATRs behind the best price. */
+  trailAtr: number | null;
+  /** Bank half the position at the first target and let the rest run to the second. */
+  scaleOut: boolean;
+}
+
+export const NO_MANAGEMENT: ExitPolicy = {
+  breakEvenAtR: null,
+  trailAtr: null,
+  scaleOut: false,
+};
+
 export interface StrategyTuning {
   /** Minimum confluence score (0-100) required to issue a signal. */
   minScore: number;
@@ -167,6 +186,8 @@ export interface StrategyTuning {
   maxHoldMinutes: number;
   /** Bars to stand aside after a trade closes, so one move is traded once. */
   cooldownBars: number;
+  /** What happens to the position between entry and exit. */
+  exit: ExitPolicy;
   /**
    * Setups allowed to fire. `null` means all of them; a list restricts the
    * system to the strategies that have earned their place on this instrument.
@@ -186,6 +207,7 @@ export const DEFAULT_TUNING: StrategyTuning = {
   maxTargetAtr: 1.8,
   maxHoldMinutes: 20,
   cooldownBars: 5,
+  exit: NO_MANAGEMENT,
   /**
    * Trend pullback, S/R bounce, VWAP pullback and failed breakout lost money in
    * all four independent measurements (both instruments x both halves of a

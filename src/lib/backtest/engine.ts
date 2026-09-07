@@ -6,6 +6,7 @@ import {
   TIMEFRAME_ROLES,
   type InstrumentConfig,
   type StrategyKey,
+  type ExitPolicy,
   type StrategyTuning,
   type TimeframeRole,
 } from '@/lib/config';
@@ -183,6 +184,8 @@ export function replay(
       entryCandles,
       i,
       maxHoldBars,
+      tuning.exit,
+      context.views.entry.atr,
     );
     if (!trade) continue;
 
@@ -199,9 +202,11 @@ const window = (series: Candle[], size: number): Candle[] =>
   series.length > size ? series.slice(-size) : series;
 
 /**
- * Walks forward minute by minute until the stop or the target is touched.
- * When one candle spans both, the stop is assumed to have been hit first — the
- * pessimistic reading, since intrabar order is unknowable from OHLC data.
+ * Walks a position forward minute by minute under the configured exit policy.
+ *
+ * Within a bar the stop is always checked before the target: when one candle
+ * spans both, the pessimistic reading is the only honest one, since OHLC data
+ * cannot say which came first.
  */
 function simulate(
   strategy: StrategyKey,
@@ -211,35 +216,81 @@ function simulate(
   candles: Candle[],
   signalIndex: number,
   maxHoldBars: number,
+  exit: ExitPolicy,
+  entryAtr: number,
 ): BacktestTrade | null {
   const isLong = direction === 'LONG';
+  const s = isLong ? 1 : -1;
   const spread = candles[signalIndex].spread;
   // Filled at the signal bar's close, paying half the spread on the way in.
-  const entry = plan.entry + (isLong ? spread / 2 : -spread / 2);
+  const entry = plan.entry + (s * spread) / 2;
   const risk = Math.abs(entry - plan.stopLoss);
   if (risk <= 0) return null;
 
+  let stop = plan.stopLoss;
+  let best = entry;
+  /** Fraction of the position still open. */
+  let open = 1;
+  /** Result already banked by a partial exit, in R. */
+  let banked = 0;
+  let scaledOut = false;
+
+  const rOf = (exitPrice: number) => (s * (exitPrice - entry)) / risk;
   const lastIndex = Math.min(candles.length - 1, signalIndex + maxHoldBars);
+
   for (let i = signalIndex + 1; i <= lastIndex; i += 1) {
-    const { high, low, closeTime } = candles[i];
-    if (isLong ? low <= plan.stopLoss : high >= plan.stopLoss) {
-      return build(plan.stopLoss, 'LOSS', closeTime, i);
+    const bar = candles[i];
+
+    if (isLong ? bar.low <= stop : bar.high >= stop) {
+      const total = banked + open * rOf(stop);
+      return build(stop, total > 0 ? 'WIN' : 'LOSS', bar.closeTime, i, total);
     }
-    if (isLong ? high >= plan.takeProfit : low <= plan.takeProfit) {
-      return build(plan.takeProfit, 'WIN', closeTime, i);
+
+    const targetHit = isLong ? bar.high >= plan.takeProfit : bar.low <= plan.takeProfit;
+    if (targetHit) {
+      if (!exit.scaleOut || plan.takeProfit2 === null) {
+        return build(plan.takeProfit, 'WIN', bar.closeTime, i, banked + open * rOf(plan.takeProfit));
+      }
+      if (!scaledOut) {
+        // Half off at the first target; the rest rides with a free stop.
+        banked += 0.5 * rOf(plan.takeProfit);
+        open = 0.5;
+        scaledOut = true;
+        stop = isLong ? Math.max(stop, entry) : Math.min(stop, entry);
+      }
+    }
+
+    if (scaledOut && plan.takeProfit2 !== null) {
+      const secondHit = isLong ? bar.high >= plan.takeProfit2 : bar.low <= plan.takeProfit2;
+      if (secondHit) {
+        const total = banked + open * rOf(plan.takeProfit2);
+        return build(plan.takeProfit2, 'WIN', bar.closeTime, i, total);
+      }
+    }
+
+    best = isLong ? Math.max(best, bar.high) : Math.min(best, bar.low);
+    const progress = (s * (best - entry)) / risk;
+
+    if (exit.breakEvenAtR !== null && progress >= exit.breakEvenAtR) {
+      stop = isLong ? Math.max(stop, entry) : Math.min(stop, entry);
+    }
+    if (exit.trailAtr !== null && progress > 0) {
+      const trailed = best - s * exit.trailAtr * entryAtr;
+      stop = isLong ? Math.max(stop, trailed) : Math.min(stop, trailed);
     }
   }
 
   const final = candles[lastIndex];
-  return build(final.close, 'TIMEOUT', final.closeTime, lastIndex);
+  const total = banked + open * rOf(final.close);
+  return build(final.close, 'TIMEOUT', final.closeTime, lastIndex, total);
 
   function build(
     exitPrice: number,
     outcome: BacktestTrade['outcome'],
     closedAt: number,
     exitIndex: number,
+    resultR: number,
   ): BacktestTrade {
-    const move = isLong ? exitPrice - entry : entry - exitPrice;
     return {
       strategy,
       direction,
@@ -252,7 +303,7 @@ function simulate(
       plannedRiskReward: plan.riskReward,
       exitPrice,
       outcome,
-      r: Number((move / risk).toFixed(3)),
+      r: Number(resultR.toFixed(3)),
       holdMinutes: (exitIndex - signalIndex) * (TIMEFRAME_MS[TIMEFRAME_ROLES.entry] / 60_000),
     };
   }
