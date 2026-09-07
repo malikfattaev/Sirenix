@@ -15,7 +15,7 @@ const MAX_MINUTES_INTO_SESSION = 300;
  */
 export const openingRange: Strategy = {
   key: 'opening-range',
-  label: 'Opening Range Break',
+  label: 'Пробой открытия',
   bias: 'continuation',
   regimes: ['BREAKOUT', 'TREND'],
 

@@ -9,7 +9,7 @@ import type { Strategy, StrategyCandidate } from '../types';
  */
 export const meanReversion: Strategy = {
   key: 'mean-reversion',
-  label: 'Range Mean Reversion',
+  label: 'Возврат к середине',
   bias: 'reversion',
   regimes: ['RANGE'],
 

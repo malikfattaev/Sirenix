@@ -8,9 +8,9 @@ import type { Signal } from '@/lib/strategy/types';
 import { price, regimeLabel, time } from './format';
 
 const TONE = {
-  LONG: { dot: '🟢', text: 'text-long', ring: 'ring-long/30', bar: 'bg-long' },
-  SHORT: { dot: '🔴', text: 'text-short', ring: 'ring-short/30', bar: 'bg-short' },
-  WAIT: { dot: '⚪', text: 'text-wait', ring: 'ring-edge', bar: 'bg-wait' },
+  LONG: { dot: '🟢', word: 'ПОКУПКА', text: 'text-long', ring: 'ring-long/30', bar: 'bg-long' },
+  SHORT: { dot: '🔴', word: 'ПРОДАЖА', text: 'text-short', ring: 'ring-short/30', bar: 'bg-short' },
+  WAIT: { dot: '⚪', word: 'ЖДЁМ', text: 'text-wait', ring: 'ring-edge', bar: 'bg-wait' },
 } as const;
 
 /** How long the price stays tinted after a tick. */
@@ -34,19 +34,19 @@ function useTickDirection(value: number): 'up' | 'down' | null {
 
 /** Compact headline read: which way the wires lean, and what they are saying. */
 function News({ pulse }: { pulse: NewsPulse }) {
-  const lean = pulse.sentiment > 0.05 ? 'BULLISH' : pulse.sentiment < -0.05 ? 'BEARISH' : 'MIXED';
+  const lean = pulse.sentiment > 0.05 ? 'ЗА РОСТ' : pulse.sentiment < -0.05 ? 'ЗА ПАДЕНИЕ' : 'СМЕШАННО';
   const tone =
-    lean === 'BULLISH' ? 'text-long' : lean === 'BEARISH' ? 'text-short' : 'text-neutral-400';
+    pulse.sentiment > 0.05 ? 'text-long' : pulse.sentiment < -0.05 ? 'text-short' : 'text-neutral-400';
 
   return (
     <div className="mt-4">
       <div className="flex items-baseline justify-between">
         <span className="text-[11px] uppercase tracking-wider text-muted">
-          News{pulse.burst ? ' · breaking' : ''}
+          Новости{pulse.burst ? ' · срочные' : ''}
         </span>
         <span className={`tabular text-[11px] font-medium ${tone}`}>
           {lean} {pulse.sentiment > 0 ? '+' : ''}
-          {pulse.sentiment.toFixed(2)} · {pulse.count} stories
+          {pulse.sentiment.toFixed(2)} · {pulse.count} новостей
         </span>
       </div>
       <ul className="mt-2 space-y-1">
@@ -123,7 +123,7 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
             {price(current, decimals)}
           </div>
           <div className="tabular text-[11px] text-muted">
-            {price(bid, decimals)} / {price(ask, decimals)} · spread {price(spread, decimals)}
+            {price(bid, decimals)} / {price(ask, decimals)} · спред {price(spread, decimals)}
           </div>
         </div>
       </header>
@@ -131,7 +131,7 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
       <div className="mt-5 flex items-center gap-3">
         <span className={`flex items-center gap-2 text-3xl font-bold tracking-tight ${tone.text}`}>
           <span className="text-2xl">{tone.dot}</span>
-          {signal.type}
+          {tone.word}
         </span>
         {signal.type !== 'WAIT' && (
           <span className="tabular text-lg font-medium text-neutral-400">{signal.score}/100</span>
@@ -147,12 +147,12 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
       {plan ? (
         <div className="mt-4 divide-y divide-edge border-y border-edge">
           <Row
-            label="Entry"
+            label="Вход"
             value={`${price(plan.entryLow, decimals)} / ${price(plan.entryHigh, decimals)}`}
           />
-          <Row label="Stop Loss" value={price(plan.stopLoss, decimals)} accent="text-short" />
+          <Row label="Стоп" value={price(plan.stopLoss, decimals)} accent="text-short" />
           <Row
-            label="Take Profit"
+            label="Цель"
             value={
               plan.takeProfit2 === null
                 ? price(plan.takeProfit, decimals)
@@ -160,11 +160,11 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
             }
             accent="text-long"
           />
-          <Row label="Risk / Reward" value={`1:${plan.riskReward.toFixed(2)}`} />
+          <Row label="Риск / прибыль" value={`1:${plan.riskReward.toFixed(2)}`} />
         </div>
       ) : (
         <div className="mt-4 rounded-lg border border-edge bg-surface-raised px-3 py-2 text-sm text-neutral-400">
-          {signal.blockedBy ?? 'No setup right now'}
+          {signal.blockedBy ?? 'Сетапа сейчас нет'}
         </div>
       )}
 

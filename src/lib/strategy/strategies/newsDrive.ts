@@ -16,7 +16,7 @@ const IMPULSE_BARS = 5;
  */
 export const newsDrive: Strategy = {
   key: 'news-drive',
-  label: 'News momentum',
+  label: 'Импульс на новостях',
   bias: 'continuation',
   regimes: ['TREND', 'BREAKOUT', 'EXTREME_VOLATILITY'],
 

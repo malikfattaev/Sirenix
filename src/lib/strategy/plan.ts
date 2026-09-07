@@ -34,14 +34,14 @@ export function buildPlan(
   const minRisk = Math.max(tuning.minStopAtr * setup.atr, tuning.minRiskToSpread * context.spread);
   const maxRisk = tuning.maxStopAtr * setup.atr;
 
-  let stopReason = `Stop ${format(round(stopLoss))} beyond the level that invalidates the setup`;
+  let stopReason = `Стоп ${format(round(stopLoss))} за уровнем, который отменяет сетап`;
   if (risk < minRisk) {
     stopLoss = price - s * minRisk;
     risk = minRisk;
-    stopReason = `Stop ${format(round(stopLoss))} widened to clear noise and spread`;
+    stopReason = `Стоп ${format(round(stopLoss))} расширен, чтобы вынести шум и спред`;
   }
   if (risk > maxRisk) {
-    return { ok: false, detail: `the stop would sit ${(risk / setup.atr).toFixed(1)} ATR away, too wide to scalp` };
+    return { ok: false, detail: `стоп встал бы в ${(risk / setup.atr).toFixed(1)} ATR, слишком далеко для скальпа` };
   }
 
   // --- Targets -------------------------------------------------------------
@@ -76,10 +76,10 @@ export function buildPlan(
     const nearest = ahead[0];
     const shortfall =
       nearest === undefined
-        ? 'no target in front of price'
+        ? 'впереди цены нет цели'
         : Math.abs(nearest - price) < minReward
-          ? `nearest target only pays 1:${(Math.abs(nearest - price) / risk).toFixed(1)}`
-          : `nearest target is ${(Math.abs(nearest - price) / setup.atr).toFixed(1)} ATR away, too far to scalp`;
+          ? `ближайшая цель даёт только 1:${(Math.abs(nearest - price) / risk).toFixed(1)}`
+          : `ближайшая цель в ${(Math.abs(nearest - price) / setup.atr).toFixed(1)} ATR, слишком далеко для скальпа`;
     return { ok: false, detail: shortfall };
   }
 
@@ -97,7 +97,7 @@ export function buildPlan(
       takeProfit2: takeProfit2 === null ? null : round(takeProfit2),
       riskReward: Number(riskReward.toFixed(2)),
       stopReason,
-      targetReason: `First target ${format(round(takeProfit))} at the nearest level price can realistically reach`,
+      targetReason: `Первая цель ${format(round(takeProfit))} на ближайшем уровне, до которого цена реально дойдёт`,
     },
   };
 }

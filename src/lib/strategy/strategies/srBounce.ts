@@ -9,7 +9,7 @@ import type { Strategy, StrategyCandidate } from '../types';
  */
 export const srBounce: Strategy = {
   key: 'sr-bounce',
-  label: 'S/R Bounce',
+  label: 'Отбой от уровня',
   bias: 'reversion',
   regimes: ['RANGE', 'TREND', 'CHOP'],
 

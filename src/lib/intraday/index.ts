@@ -87,20 +87,20 @@ export function analyseIntraday(
     blockedBy: `${STANDING_ASIDE} ${cause}`,
   });
 
-  if (!read) return wait('not enough 15m history yet');
+  if (!read) return wait('пока мало истории на 15м');
   if (base.marketStatus !== 'TRADEABLE') {
-    return wait(`market is ${base.marketStatus.toLowerCase().replace(/_/g, ' ')}`);
+    return wait('рынок закрыт');
   }
 
   const strength = Math.abs(read.stretch);
   const move = read.changePercent;
   const context = [
-    `${HOLD_MINUTES}m move ${move >= 0 ? '+' : ''}${move.toFixed(2)}%, push ${strength.toFixed(2)} of ${INTRADAY.threshold} needed`,
-    `15m RSI ${read.rsi.toFixed(0)}`,
+    `Движение за ${HOLD_MINUTES} мин ${move >= 0 ? '+' : ''}${move.toFixed(2)}%, сила ${strength.toFixed(2)} из ${INTRADAY.threshold} нужных`,
+    `RSI на 15м ${read.rsi.toFixed(0)}`,
   ];
 
-  if (strength < INTRADAY.threshold) return wait('the move is not strong enough to join', context);
-  if (!read.confirmed) return wait('the last 15m candle closed against the move', context);
+  if (strength < INTRADAY.threshold) return wait('движение слишком слабое, чтобы входить', context);
+  if (!read.confirmed) return wait('последняя свеча 15м закрылась против движения', context);
 
   const isLong = read.stretch > 0;
   const side = isLong ? 1 : -1;
@@ -110,7 +110,7 @@ export function analyseIntraday(
     type: isLong ? 'LONG' : 'SHORT',
     score: Math.min(100, Math.round((strength / INTRADAY.scoreCeiling) * 100)),
     strategy: 'intraday-momentum',
-    strategyLabel: 'Momentum',
+    strategyLabel: 'Импульс внутри дня',
     plan: {
       entryLow: round(price - 0.2 * read.atr),
       entryHigh: round(price + 0.2 * read.atr),
@@ -119,15 +119,15 @@ export function analyseIntraday(
       takeProfit: round(price + side * INTRADAY.targetAtr * read.atr),
       takeProfit2: null,
       riskReward: Number((INTRADAY.targetAtr / INTRADAY.stopAtr).toFixed(2)),
-      stopReason: `Stop ${INTRADAY.stopAtr} x 15m ATR away, behind the noise of the move`,
-      targetReason: `Target ${INTRADAY.targetAtr} x 15m ATR, the distance this push typically adds`,
+      stopReason: `Стоп в ${INTRADAY.stopAtr} ATR на 15м, за шумом движения`,
+      targetReason: `Цель в ${INTRADAY.targetAtr} ATR на 15м, столько такой толчок обычно добавляет`,
     },
     reasons: [
       isLong
-        ? `Pushed ${Math.abs(move).toFixed(2)}% over the last hour and closed on its highs`
-        : `Dropped ${Math.abs(move).toFixed(2)}% over the last hour and closed on its lows`,
-      `15m RSI ${read.rsi.toFixed(0)}, push ${strength.toFixed(2)}`,
-      `Close after ${HOLD_MINUTES} minutes whether or not the target is reached`,
+        ? `Прошёл ${Math.abs(move).toFixed(2)}% за час и закрылся на максимумах`
+        : `Упал на ${Math.abs(move).toFixed(2)}% за час и закрылся на минимумах`,
+      `RSI на 15м ${read.rsi.toFixed(0)}, сила ${strength.toFixed(2)}`,
+      `Закрытие через ${HOLD_MINUTES} минут, дошла цель или нет`,
     ],
     blockedBy: null,
   };

@@ -14,5 +14,13 @@ export const dateTime = (timestamp: number): string =>
     minute: '2-digit',
   });
 
-export const regimeLabel = (regime: string): string =>
-  regime.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+/** Russian names for the market regimes shown on a card. */
+const REGIME_LABEL: Record<string, string> = {
+  TREND: 'ТРЕНД',
+  RANGE: 'ДИАПАЗОН',
+  BREAKOUT: 'ПРОБОЙ',
+  CHOP: 'ПИЛА',
+  EXTREME_VOLATILITY: 'ВЫСОКАЯ ВОЛАТИЛЬНОСТЬ',
+};
+
+export const regimeLabel = (regime: string): string => REGIME_LABEL[regime] ?? regime;

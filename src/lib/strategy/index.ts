@@ -17,10 +17,17 @@ export { buildViews } from './views';
 export { STRATEGIES, STRATEGY_LABELS } from './strategies';
 
 /** Prefix shared by every reason the board gives for not trading. */
-export const STANDING_ASIDE = 'Standing aside:';
+export const STANDING_ASIDE = 'Ждём:';
 
-/** Lower-cases only the first letter, so wording after the prefix reads as one sentence. */
-const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+/** What the broker reports when a market is not tradeable right now. */
+const MARKET_STATUS: Record<string, string> = {
+  CLOSED: 'закрыт',
+  EDITS_ONLY: 'принимает только изменения заявок',
+  OFFLINE: 'недоступен',
+  SUSPENDED: 'торги приостановлены',
+  AUCTION: 'на аукционе',
+  AUCTION_NO_EDIT: 'на аукционе',
+};
 
 export interface Decision {
   type: SignalType;
@@ -68,10 +75,10 @@ export function decide(
   });
 
   if (context.marketStatus !== 'TRADEABLE') {
-    return empty(`market is ${context.marketStatus.toLowerCase().replace(/_/g, ' ')}`);
+    return empty(`рынок ${MARKET_STATUS[context.marketStatus] ?? 'закрыт'}`);
   }
   if (context.regime === 'CHOP') {
-    return empty('the market is choppy', [context.regimeReason]);
+    return empty('рынок пилит, сетапы не работают', [context.regimeReason]);
   }
 
   const eligible = STRATEGIES.filter(
@@ -90,7 +97,7 @@ export function decide(
     // Refuse to chase: once price has run past the trigger the entry is gone.
     const chased = Math.abs(context.price - candidate.triggerPrice) / context.views.entry.atr;
     if (chased > tuning.maxChaseAtr) {
-      rejections.push({ label: strategy.label, cause: `the move already happened, ${chased.toFixed(1)} ATR past the entry` });
+      rejections.push({ label: strategy.label, cause: `движение уже прошло, ${chased.toFixed(1)} ATR мимо входа` });
       continue;
     }
     // A 1H move straight against us vetoes a continuation setup. A fade is
@@ -98,7 +105,7 @@ export function decide(
     const hourly = context.views.context;
     const against = sign(candidate.direction) * (hourly.close - hourly.ema20);
     if (strategy.bias === 'continuation' && against < -1.5 * hourly.atr) {
-      rejections.push({ label: strategy.label, cause: 'the hourly chart is moving hard the other way' });
+      rejections.push({ label: strategy.label, cause: 'часовой график идёт сильно против' });
       continue;
     }
 
@@ -110,7 +117,7 @@ export function decide(
 
     const { score, components } = scoreSetup(context, candidate, strategy.bias, plan.plan, tuning);
     if (score < tuning.minScore) {
-      rejections.push({ label: strategy.label, cause: `confluence only ${score} of ${tuning.minScore} needed` });
+      rejections.push({ label: strategy.label, cause: `совпадений только ${score} из ${tuning.minScore} нужных` });
       continue;
     }
     evaluated.push({ candidate, label: strategy.label, plan: plan.plan, score, components });
@@ -119,7 +126,7 @@ export function decide(
   if (evaluated.length === 0) {
     // The nearest miss is far more useful than "nothing fired".
     const nearest = rejections[0];
-    return empty(nearest ? lower(nearest.cause) : 'no setup has formed yet', [
+    return empty(nearest ? nearest.cause : 'ни один сетап пока не сложился', [
       context.regimeReason,
       ...rejections.slice(0, 3).map((rejection) => `${rejection.label}: ${rejection.cause}`),
     ]);

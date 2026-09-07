@@ -1,5 +1,6 @@
 'use client';
 
+import { STRATEGY_NAME } from '@/lib/config';
 import type { BacktestResult } from '@/lib/backtest/engine';
 
 /** The API strips the trade list, so the panel only ever sees the summary. */
@@ -42,10 +43,10 @@ export function BacktestPanel({
     <div className="rounded-xl border border-edge bg-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">STRATEGY CHECK</h3>
+          <h3 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">ПРОВЕРКА СТРАТЕГИЙ</h3>
           <p className="mt-1 text-[12px] text-muted">
-            Replays the exact same logic over historical candles, without ever looking at a future one.
-            The window is split in half: a strategy has to work in both.
+            Прогоняет ту же самую логику по истории, ни разу не заглядывая в будущую свечу.
+            Период делится пополам: стратегия должна работать в обеих половинах.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -59,7 +60,7 @@ export function BacktestPanel({
                   days === option ? 'bg-surface-raised text-neutral-100' : 'text-muted hover:text-neutral-300'
                 }`}
               >
-                {option}d
+                {option}д
               </button>
             ))}
           </div>
@@ -69,7 +70,7 @@ export function BacktestPanel({
             disabled={loading}
             className="rounded-lg border border-edge bg-surface-raised px-4 py-1.5 text-[12px] font-medium text-neutral-200 transition hover:border-neutral-600 disabled:opacity-50"
           >
-            {loading ? 'Running…' : 'Run'}
+            {loading ? 'Считаю…' : 'Проверить'}
           </button>
         </div>
       </div>
@@ -82,19 +83,19 @@ export function BacktestPanel({
             <div key={result.instrumentId} className="rounded-lg border border-edge bg-surface-raised p-4">
               <div className="flex items-baseline justify-between">
                 <h4 className="text-[13px] font-semibold tracking-wider text-neutral-300">
-                  {result.label} <span className="font-normal text-muted">· scalping</span>
+                  {result.label} <span className="font-normal text-muted">· скальпинг</span>
                 </h4>
-                <span className="text-[11px] text-muted">{result.barsTested} bars replayed</span>
+                <span className="text-[11px] text-muted">прогнано свечей: {result.barsTested}</span>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-                <Metric label="Signals" value={String(result.signals)} />
-                <Metric label="Wins" value={String(result.wins)} tone="text-long" />
-                <Metric label="Losses" value={String(result.losses)} tone="text-short" />
-                <Metric label="Win rate" value={`${result.winRate}%`} />
-                <Metric label="Avg R/R" value={`1:${result.avgRiskReward}`} />
+                <Metric label="Сигналов" value={String(result.signals)} />
+                <Metric label="В плюс" value={String(result.wins)} tone="text-long" />
+                <Metric label="В минус" value={String(result.losses)} tone="text-short" />
+                <Metric label="Винрейт" value={`${result.winRate}%`} />
+                <Metric label="Средний R/R" value={`1:${result.avgRiskReward}`} />
                 <Metric
-                  label="Total"
+                  label="Итог"
                   value={`${result.totalR > 0 ? '+' : ''}${result.totalR}R`}
                   tone={result.totalR > 0 ? 'text-long' : 'text-short'}
                 />
@@ -104,17 +105,19 @@ export function BacktestPanel({
                 <table className="mt-4 w-full text-left text-[12px]">
                   <thead className="text-[10px] uppercase tracking-wider text-muted">
                     <tr className="border-b border-edge">
-                      <th className="py-2 font-medium">Strategy</th>
-                      <th className="py-2 text-right font-medium">n</th>
-                      <th className="py-2 text-right font-medium">Win rate</th>
-                      <th className="py-2 text-right font-medium">Avg R/R</th>
-                      <th className="py-2 text-right font-medium">Total</th>
+                      <th className="py-2 font-medium">Стратегия</th>
+                      <th className="py-2 text-right font-medium">Сделок</th>
+                      <th className="py-2 text-right font-medium">Винрейт</th>
+                      <th className="py-2 text-right font-medium">Средний R/R</th>
+                      <th className="py-2 text-right font-medium">Итог</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-edge">
                     {result.byStrategy.map((row) => (
                       <tr key={row.strategy}>
-                        <td className="py-2 text-neutral-300">{row.strategy}</td>
+                        <td className="py-2 text-neutral-300">
+                          {STRATEGY_NAME[row.strategy] ?? row.strategy}
+                        </td>
                         <td className="tabular py-2 text-right text-neutral-400">{row.signals}</td>
                         <td className="tabular py-2 text-right text-neutral-400">{row.winRate}%</td>
                         <td className="tabular py-2 text-right text-neutral-400">1:{row.avgRiskReward}</td>

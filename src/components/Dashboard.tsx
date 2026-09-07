@@ -57,7 +57,7 @@ function Board({
       </div>
       {!loading && signals.length === 0 && (
         <p className="mt-3 rounded-xl border border-edge bg-surface px-4 py-3 text-[13px] text-muted">
-          Nothing here right now.
+          Сейчас здесь пусто.
         </p>
       )}
     </section>
@@ -85,13 +85,13 @@ export function Dashboard() {
     try {
       const response = await fetch(`/api/backtest?days=${backtestDays.current}`);
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? 'Backtest failed');
+      if (!response.ok) throw new Error(body.error ?? 'Проверка не прошла');
       setBacktest((current) => ({ ...current, loading: false, results: body.results }));
     } catch (cause) {
       setBacktest((current) => ({
         ...current,
         loading: false,
-        error: cause instanceof Error ? cause.message : 'Backtest failed',
+        error: cause instanceof Error ? cause.message : 'Проверка не прошла',
       }));
     }
   }, []);
@@ -105,13 +105,13 @@ export function Dashboard() {
     try {
       const response = await fetch('/api/prices', { cache: 'no-store' });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? 'Could not load prices');
+      if (!response.ok) throw new Error(body.error ?? 'Не удалось загрузить котировки');
       setQuotes(
         Object.fromEntries((body.quotes as Quote[]).map((quote) => [quote.instrumentId, quote])),
       );
       setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not load prices');
+      setError(cause instanceof Error ? cause.message : 'Не удалось загрузить котировки');
     }
   }, []);
 
@@ -122,12 +122,12 @@ export function Dashboard() {
         fetch('/api/history?limit=20', { cache: 'no-store' }),
       ]);
       const body = await signalsResponse.json();
-      if (!signalsResponse.ok) throw new Error(body.error ?? 'Could not load signals');
+      if (!signalsResponse.ok) throw new Error(body.error ?? 'Не удалось загрузить сигналы');
 
       setSignals(body.signals);
       if (historyResponse.ok) setHistory((await historyResponse.json()).signals);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not load signals');
+      setError(cause instanceof Error ? cause.message : 'Не удалось загрузить сигналы');
     }
   }, []);
 
@@ -151,7 +151,7 @@ export function Dashboard() {
       <Board signals={signals} quotes={quotes} loading={loading} />
 
       <section className="mt-10">
-        <h2 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">RECENT SIGNALS</h2>
+        <h2 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">ПОСЛЕДНИЕ СИГНАЛЫ</h2>
         <div className="mt-3">
           <HistoryTable signals={history} />
         </div>

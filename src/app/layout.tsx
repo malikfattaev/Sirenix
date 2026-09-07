@@ -3,12 +3,12 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Sirenix',
-  description: 'Scalping analysis for GOLD and BRENT OIL from live Capital.com market data.',
+  description: 'Торговые сигналы по золоту, нефти, индексам и валютам на данных Capital.com.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );

@@ -1,4 +1,4 @@
-import { HORIZON_LABEL, type Horizon } from '@/lib/config';
+import { HORIZON_LABEL, STRATEGY_NAME, type Horizon } from '@/lib/config';
 import type { SignalRecord } from '@/lib/db';
 import { dateTime, price } from './format';
 
@@ -17,19 +17,22 @@ const STATUS_TONE: Record<SignalRecord['status'], string> = {
  * been removed is marked as such rather than silently looking current.
  */
 const horizonOf = (record: SignalRecord): string =>
-  HORIZON_LABEL[record.horizon as Horizon] ?? 'RETIRED';
+  HORIZON_LABEL[record.horizon as Horizon] ?? 'СНЯТАЯ СТРАТЕГИЯ';
 
 /** Shown instead of the raw status where the word alone would mislead. */
-const STATUS_LABEL: Partial<Record<SignalRecord['status'], string>> = {
-  EXPIRED: 'CLOSED AT TIME',
-  CANCELLED: 'NOT EVALUATED',
+const STATUS_LABEL: Record<SignalRecord['status'], string> = {
+  OPEN: 'ЖДЁМ',
+  WIN: 'ПЛЮС',
+  LOSS: 'МИНУС',
+  EXPIRED: 'ЗАКРЫТ ПО ВРЕМЕНИ',
+  CANCELLED: 'НЕ ОЦЕНЁН',
 };
 
 export function HistoryTable({ signals }: { signals: SignalRecord[] }) {
   if (signals.length === 0) {
     return (
       <p className="rounded-xl border border-edge bg-surface p-5 text-sm text-muted">
-        No signals recorded yet. They appear here as soon as a setup fires.
+        Сигналов пока не было. Появятся здесь, как только сработает сетап.
       </p>
     );
   }
@@ -39,14 +42,14 @@ export function HistoryTable({ signals }: { signals: SignalRecord[] }) {
       <table className="w-full min-w-[720px] text-left text-[13px]">
         <thead className="text-[11px] uppercase tracking-wider text-muted">
           <tr className="border-b border-edge">
-            <th className="px-4 py-3 font-medium">Instrument</th>
-            <th className="px-4 py-3 font-medium">Signal</th>
-            <th className="px-4 py-3 font-medium">Strategy</th>
-            <th className="px-4 py-3 text-right font-medium">Entry</th>
-            <th className="px-4 py-3 text-right font-medium">SL</th>
-            <th className="px-4 py-3 text-right font-medium">TP</th>
-            <th className="px-4 py-3 text-right font-medium">Result</th>
-            <th className="px-4 py-3 text-right font-medium">Time</th>
+            <th className="px-4 py-3 font-medium">Инструмент</th>
+            <th className="px-4 py-3 font-medium">Сигнал</th>
+            <th className="px-4 py-3 font-medium">Стратегия</th>
+            <th className="px-4 py-3 text-right font-medium">Вход</th>
+            <th className="px-4 py-3 text-right font-medium">Стоп</th>
+            <th className="px-4 py-3 text-right font-medium">Цель</th>
+            <th className="px-4 py-3 text-right font-medium">Итог</th>
+            <th className="px-4 py-3 text-right font-medium">Время</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-edge">
@@ -58,14 +61,17 @@ export function HistoryTable({ signals }: { signals: SignalRecord[] }) {
               <td
                 className={`px-4 py-2.5 font-medium ${signal.direction === 'LONG' ? 'text-long' : 'text-short'}`}
               >
-                {signal.direction} <span className="tabular text-muted">{signal.score}</span>
+                {signal.direction === 'LONG' ? 'ПОКУПКА' : 'ПРОДАЖА'}{' '}
+                <span className="tabular text-muted">{signal.score}</span>
               </td>
-              <td className="px-4 py-2.5 text-neutral-400">{signal.strategy}</td>
+              <td className="px-4 py-2.5 text-neutral-400">
+                {STRATEGY_NAME[signal.strategy] ?? signal.strategy}
+              </td>
               <td className="tabular px-4 py-2.5 text-right">{price(signal.entry, signal.decimals)}</td>
               <td className="tabular px-4 py-2.5 text-right">{price(signal.stopLoss, signal.decimals)}</td>
               <td className="tabular px-4 py-2.5 text-right">{price(signal.takeProfit, signal.decimals)}</td>
               <td className={`tabular px-4 py-2.5 text-right ${STATUS_TONE[signal.status]}`}>
-                {STATUS_LABEL[signal.status] ?? signal.status}
+                {STATUS_LABEL[signal.status]}
                 {signal.resultR === null ? '' : ` ${signal.resultR > 0 ? '+' : ''}${signal.resultR}R`}
               </td>
               <td className="tabular px-4 py-2.5 text-right text-muted">{dateTime(signal.createdAt)}</td>

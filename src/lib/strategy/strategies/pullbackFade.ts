@@ -11,7 +11,7 @@ import type { Strategy, StrategyCandidate } from '../types';
  */
 export const pullbackFade: Strategy = {
   key: 'pullback-fade',
-  label: 'Pullback Continuation',
+  label: 'Продолжение после отката',
   bias: 'reversion',
   regimes: ['TREND', 'BREAKOUT', 'RANGE'],
 

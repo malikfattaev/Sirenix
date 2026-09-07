@@ -372,8 +372,25 @@ export const DEFAULT_TUNING: StrategyTuning = {
 export type Horizon = 'scalp' | 'intraday';
 
 export const HORIZON_LABEL: Record<Horizon, string> = {
-  scalp: 'SCALPING',
-  intraday: 'INTRADAY',
+  scalp: 'СКАЛЬПИНГ',
+  intraday: 'ВНУТРИ ДНЯ',
+};
+
+/** Readable name per strategy, shown wherever a raw key would otherwise appear. */
+export const STRATEGY_NAME: Record<string, string> = {
+  'trend-pullback': 'Откат по тренду',
+  'pullback-fade': 'Продолжение после отката',
+  'breakout-retest': 'Пробой и ретест',
+  momentum: 'Импульс',
+  'news-drive': 'Импульс на новостях',
+  'vwap-pullback': 'Откат к VWAP',
+  'sr-bounce': 'Отбой от уровня',
+  'mean-reversion': 'Возврат к середине',
+  'failed-breakout': 'Ложный пробой',
+  'opening-range': 'Пробой открытия',
+  'intraday-momentum': 'Импульс внутри дня',
+  'daily-reversion': 'Дневной разворот',
+  'index-reversion': 'Разворот по индексу',
 };
 
 /**

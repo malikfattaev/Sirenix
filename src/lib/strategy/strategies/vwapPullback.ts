@@ -9,7 +9,7 @@ import type { Strategy, StrategyCandidate } from '../types';
  */
 export const vwapPullback: Strategy = {
   key: 'vwap-pullback',
-  label: 'VWAP Pullback',
+  label: 'Откат к VWAP',
   bias: 'continuation',
   regimes: ['TREND', 'RANGE', 'BREAKOUT'],
 
