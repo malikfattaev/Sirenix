@@ -1,5 +1,5 @@
 import { capital } from '@/lib/capital/client';
-import { INDEX_INSTRUMENTS, SWING } from '@/lib/config';
+import { INSTRUMENTS, SWING } from '@/lib/config';
 import { atr as atrSeries, ema, rsi as rsiSeries } from '@/lib/indicators';
 import { toCandles, type Candle } from '@/lib/market/candles';
 
@@ -110,7 +110,7 @@ function simulate(instrumentId: string, candles: Candle[]): SwingTrade[] {
   return trades;
 }
 
-/** Runs the daily reversion signal over the whole index universe. */
+/** Runs the daily reversion signal over gold and oil. */
 export async function runSwingBacktest(days: number): Promise<SwingBacktestResult> {
   const bars = Math.min(5000, Math.max(SWING.candleDepth, Math.ceil(days * 24)));
   const all: SwingTrade[] = [];
@@ -118,7 +118,7 @@ export async function runSwingBacktest(days: number): Promise<SwingBacktestResul
   let from = Number.POSITIVE_INFINITY;
   let to = 0;
 
-  for (const instrument of INDEX_INSTRUMENTS) {
+  for (const instrument of INSTRUMENTS) {
     const candles = toCandles(await capital.getCandles(instrument.epic, 'HOUR', bars), 'HOUR');
     if (candles.length === 0) continue;
     from = Math.min(from, candles[0].time);

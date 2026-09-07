@@ -1,9 +1,9 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { DEDUPE_WINDOW_MS, SIGNAL_LIFETIME_MS } from '@/lib/config';
+import { ALL_INSTRUMENTS, DEDUPE_WINDOW_MS, SIGNAL_LIFETIME_MS } from '@/lib/config';
 import type { Candle } from '@/lib/market/candles';
-import type { Signal } from '@/lib/strategy';
+import type { Horizon, Signal } from '@/lib/strategy';
 
 export type SignalStatus = 'OPEN' | 'WIN' | 'LOSS' | 'EXPIRED';
 
@@ -175,14 +175,24 @@ export function recordSignal(signal: Signal): SignalRecord | null {
 /**
  * Settles open signals against what price actually did afterwards.
  *
- * Walks the 1-minute candles recorded since each signal was issued; if a candle
- * spans both levels the stop is assumed to have been hit first, which is the
- * pessimistic reading and keeps the history honest.
+ * Walks the candles recorded since each signal was issued; if one spans both
+ * levels the stop is assumed to have been hit first, which is the pessimistic
+ * reading and keeps the history honest.
+ *
+ * Scoped to one horizon because gold and oil carry both a minute-scale and a
+ * daily signal at once, and each has to be settled on its own candles: hourly
+ * bars are far too coarse to judge a scalp, and the minute feed does not reach
+ * back far enough to judge a two-day fade.
  */
-export function resolveOpenSignals(instrumentId: string, candles: Candle[], now: number): number {
+export function resolveOpenSignals(
+  instrumentId: string,
+  horizon: Horizon,
+  candles: Candle[],
+  now: number,
+): number {
   const open = db()
-    .prepare(`SELECT * FROM signals WHERE instrument_id = ? AND status = 'OPEN'`)
-    .all(instrumentId) as Row[];
+    .prepare(`SELECT * FROM signals WHERE instrument_id = ? AND horizon = ? AND status = 'OPEN'`)
+    .all(instrumentId, horizon) as Row[];
   if (open.length === 0) return 0;
 
   const update = db().prepare(
@@ -211,7 +221,7 @@ export function resolveOpenSignals(instrumentId: string, candles: Candle[], now:
       }
     }
 
-    const lifetime = SIGNAL_LIFETIME_MS[row.horizon === 'swing' ? 'swing' : 'scalp'];
+    const lifetime = SIGNAL_LIFETIME_MS[horizon];
     if (!outcome && now - row.created_at > lifetime) {
       const last = since[since.length - 1];
       if (last) outcome = { status: 'EXPIRED', price: last.close, at: now };
@@ -226,10 +236,20 @@ export function resolveOpenSignals(instrumentId: string, candles: Candle[], now:
   return settled;
 }
 
-/** Most recent signals, newest first. */
+/**
+ * Most recent signals, newest first.
+ *
+ * Restricted to the instruments currently on the board: rows left behind by a
+ * market that is no longer tracked can never be settled, so they would sit in
+ * the history as permanently open. They stay in the database either way.
+ */
 export function recentSignals(limit = 25): SignalRecord[] {
+  const tracked = ALL_INSTRUMENTS.map((instrument) => instrument.id);
   const rows = db()
-    .prepare('SELECT * FROM signals ORDER BY created_at DESC LIMIT ?')
-    .all(limit) as Row[];
+    .prepare(
+      `SELECT * FROM signals WHERE instrument_id IN (${tracked.map(() => '?').join(', ')})
+        ORDER BY created_at DESC LIMIT ?`,
+    )
+    .all(...tracked, limit) as Row[];
   return rows.map(toRecord);
 }

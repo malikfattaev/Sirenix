@@ -137,11 +137,10 @@ export function Dashboard() {
   usePoll(refreshQuotes, PRICE_REFRESH_INTERVAL_MS);
   usePoll(refreshSignals, SIGNAL_REFRESH_INTERVAL_MS);
 
-  // Anything actionable comes first; the rest collapses into a watch list.
+  // Gold and oil are read on two horizons at once, so each gets its own board.
   const loading = signals.length === 0 && !error;
-  const active = signals.filter((signal) => signal.horizon === 'swing' && signal.type !== 'WAIT');
   const scalps = signals.filter((signal) => signal.horizon === 'scalp');
-  const waiting = signals.filter((signal) => signal.horizon === 'swing' && signal.type === 'WAIT');
+  const daily = signals.filter((signal) => signal.horizon === 'swing');
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
@@ -156,32 +155,19 @@ export function Dashboard() {
       )}
 
       <Board
-        title="INDICES · DAILY REVERSION"
-        note="Fades a sharp one-day move. Backtest: 62.8% win rate over 2014 trades, closed after 48h."
-        signals={active}
+        title="SCALPING"
+        note="Minute-scale setups, held for minutes. Headline tone feeds into the score."
+        signals={scalps}
         quotes={quotes}
         loading={loading}
       />
-      <Board title="SCALPING" signals={scalps} quotes={quotes} loading={loading} />
-
-      <section className="mt-8">
-        <h2 className="text-[11px] uppercase tracking-[0.2em] text-muted">
-          Watching{waiting.length > 0 ? ` · ${waiting.length}` : ''}
-        </h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {waiting.map((signal) => (
-            <span
-              key={signal.instrumentId}
-              className="tabular rounded-lg border border-edge bg-surface px-3 py-1.5 text-[12px] text-muted"
-            >
-              {signal.label}{' '}
-              <span className="text-neutral-400">
-                {(quotes[signal.instrumentId]?.price ?? signal.price).toFixed(signal.decimals)}
-              </span>
-            </span>
-          ))}
-        </div>
-      </section>
+      <Board
+        title="DAILY REVERSION"
+        note="Fades a stretched two-day move, closed after 48h. Backtest: 71.2% win rate out of sample over 312 trades."
+        signals={daily}
+        quotes={quotes}
+        loading={loading}
+      />
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">RECENT SIGNALS</h2>

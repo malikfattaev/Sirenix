@@ -5,13 +5,13 @@ import type { Quote } from '@/lib/quotes';
 import type { Signal } from '@/lib/strategy/types';
 
 /**
- * Daily mean reversion on equity indices.
+ * Daily mean reversion on gold and oil.
  *
- * A sharp one-day move that leaves price stretched from its hourly mean tends
- * to be partly given back over the following day or two. The score is the
- * average of three views of that stretch, so no single indicator can trigger a
- * signal on its own, and it is symmetric: an index that has fallen hard is a
- * long, one that has run up is a short.
+ * A sharp two-day move that leaves price stretched from its hourly mean tends
+ * to be partly given back. The score is the average of three views of that
+ * stretch, so no single indicator can trigger a signal on its own, and it is
+ * symmetric: a market that has fallen hard is a long, one that has run up is a
+ * short.
  */
 export interface SwingRead {
   /** Positive means the market fell and is stretched, so the trade is a long. */
@@ -91,7 +91,7 @@ export function analyseSwing(
 
   if (stretch < SWING.scoreThreshold) {
     return wait('Not stretched far enough to fade', [
-      `24h move ${move >= 0 ? '+' : ''}${move.toFixed(2)}%, stretch ${stretch.toFixed(2)} of ${SWING.scoreThreshold} needed`,
+      `${SWING.lookbackHours}h move ${move >= 0 ? '+' : ''}${move.toFixed(2)}%, stretch ${stretch.toFixed(2)} of ${SWING.scoreThreshold} needed`,
       `Hourly RSI ${read.rsi.toFixed(0)}`,
     ]);
   }
@@ -103,7 +103,7 @@ export function analyseSwing(
     ...base,
     type: isLong ? 'LONG' : 'SHORT',
     score,
-    strategy: 'index-reversion',
+    strategy: 'daily-reversion',
     strategyLabel: 'Daily Reversion',
     plan: {
       entryLow: round(price - 0.15 * read.atr),
@@ -118,8 +118,8 @@ export function analyseSwing(
     },
     reasons: [
       isLong
-        ? `Fell ${Math.abs(move).toFixed(2)}% over 24h and sits stretched below its hourly mean`
-        : `Rose ${Math.abs(move).toFixed(2)}% over 24h and sits stretched above its hourly mean`,
+        ? `Fell ${Math.abs(move).toFixed(2)}% over ${SWING.lookbackHours}h and sits stretched below its hourly mean`
+        : `Rose ${Math.abs(move).toFixed(2)}% over ${SWING.lookbackHours}h and sits stretched above its hourly mean`,
       `Hourly RSI ${read.rsi.toFixed(0)}, stretch ${stretch.toFixed(2)}`,
       `Close after ${SWING.holdHours}h whether or not the target is reached`,
     ],

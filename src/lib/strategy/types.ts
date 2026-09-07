@@ -119,7 +119,7 @@ export interface Signal {
   type: SignalType;
   /** Confluence strength, 0-100. Not a probability of winning. */
   score: number;
-  strategy: StrategyKey | 'index-reversion' | null;
+  strategy: StrategyKey | 'daily-reversion' | null;
   strategyLabel: string | null;
   regime: Regime;
   price: number;

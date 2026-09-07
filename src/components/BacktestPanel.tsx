@@ -82,10 +82,10 @@ export function BacktestPanel({
         <div className="mt-5 rounded-lg border border-edge bg-surface-raised p-4">
           <div className="flex items-baseline justify-between">
             <h4 className="text-[13px] font-semibold tracking-wider text-neutral-300">
-              INDICES · DAILY REVERSION
+              DAILY REVERSION
             </h4>
             <span className="text-[11px] text-muted">
-              {swing.byInstrument.filter((row) => row.totalR > 0).length} of {swing.byInstrument.length} indices positive
+              {swing.byInstrument.filter((row) => row.totalR > 0).length} of {swing.byInstrument.length} markets positive
             </span>
           </div>
 
@@ -101,7 +101,7 @@ export function BacktestPanel({
           <table className="mt-4 w-full text-left text-[12px]">
             <thead className="text-[10px] uppercase tracking-wider text-muted">
               <tr className="border-b border-edge">
-                <th className="py-2 font-medium">Index</th>
+                <th className="py-2 font-medium">Market</th>
                 <th className="py-2 text-right font-medium">n</th>
                 <th className="py-2 text-right font-medium">Win rate</th>
                 <th className="py-2 text-right font-medium">Total</th>

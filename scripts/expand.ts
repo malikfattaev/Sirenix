@@ -142,9 +142,13 @@ const line = (label: string, s: Stats) =>
   `total=${(s.totalR > 0 ? '+' : '') + s.totalR}R`.padEnd(16) + `  per=${s.perTrade}R`;
 
 async function main() {
-  console.log(`Loading ${UNIVERSE.length} instruments...`);
+  // Optional epic list, so one market can be studied on its own.
+  const only = process.argv.slice(2).filter((argument) => !argument.startsWith('-'));
+  const universe = only.length > 0 ? UNIVERSE.filter((entry) => only.includes(entry.epic)) : UNIVERSE;
+
+  console.log(`Loading ${universe.length} instruments...`);
   const prepared: Prepared[] = [];
-  for (const entry of UNIVERSE) {
+  for (const entry of universe) {
     try {
       const candles = await hourlyCandles(entry.epic, BARS);
       if (candles.length > WARMUP + 200) prepared.push(prepare(entry, candles));
@@ -175,14 +179,14 @@ async function main() {
   }
   console.log(`Testing ${grid.length} configurations...\n`);
 
-  const classes = [...new Set(UNIVERSE.map((entry) => entry.type))];
+  const classes = [...new Set(universe.map((entry) => entry.type))];
   const rows: { config: Config; type: string; is: Stats; oos: Stats }[] = [];
 
   for (const config of grid) {
     const trades = prepared.flatMap((data) => simulate(data, config));
     for (const type of [...classes, 'ALL']) {
       const subset = type === 'ALL' ? trades : trades.filter((trade) => trade.type === type);
-      if (subset.length < 60) continue;
+      if (subset.length < 40) continue;
       // Split where half the trades fall on each side, so the two samples are
       // comparable even though the instruments have unequal histories.
       const times = subset.map((trade) => trade.openedAt).sort((a, b) => a - b);
@@ -200,7 +204,7 @@ async function main() {
     `look${config.lookback} th${config.threshold} stop${config.stopAtr} tgt${config.targetAtr} ` +
     `hold${config.hold}${config.confirm ? ' confirm' : ''}`;
 
-  const robust = rows.filter((row) => row.is.totalR > 0 && row.oos.totalR > 0 && row.is.n >= 40 && row.oos.n >= 40);
+  const robust = rows.filter((row) => row.is.totalR > 0 && row.oos.totalR > 0 && row.is.n >= 25 && row.oos.n >= 25);
 
   console.log('=== Positive in BOTH halves, ranked by out-of-sample total ===');
   for (const row of robust.sort((a, b) => b.oos.totalR - a.oos.totalR).slice(0, 15)) {

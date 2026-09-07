@@ -1,4 +1,4 @@
-import { INDEX_INSTRUMENTS, INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
+import { INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
 import { getCandles } from '@/lib/market/candleCache';
 import { getHourlyCandles } from '@/lib/market/hourlyCache';
@@ -27,7 +27,7 @@ export async function analyseInstrument(
   const decimals = quote?.decimals ?? 2;
   const marketStatus = quote?.marketStatus ?? 'CLOSED';
 
-  resolveOpenSignals(instrument.id, candles.entry, now);
+  resolveOpenSignals(instrument.id, 'scalp', candles.entry, now);
 
   const base = {
     instrumentId: instrument.id,
@@ -92,8 +92,9 @@ export async function analyseInstrument(
 }
 
 /**
- * The whole board: minute-scale setups on gold and oil, and the daily
- * mean-reversion read on the index universe. One quote call prices both.
+ * The whole board. Gold and oil are read twice, on two independent horizons:
+ * minute-scale setups, and the daily fade of a stretched two-day move. One
+ * quote call prices both.
  */
 export async function analyseAllInstruments(): Promise<Signal[]> {
   const quotes = await getQuotes();
@@ -105,9 +106,9 @@ export async function analyseAllInstruments(): Promise<Signal[]> {
       INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
     ),
     Promise.all(
-      INDEX_INSTRUMENTS.map(async (instrument) => {
+      INSTRUMENTS.map(async (instrument) => {
         const candles = await getHourlyCandles(instrument);
-        resolveOpenSignals(instrument.id, candles, now);
+        resolveOpenSignals(instrument.id, 'swing', candles, now);
         const signal = analyseSwing(instrument, candles, byId.get(instrument.id), now);
         recordSignal(signal);
         return signal;
