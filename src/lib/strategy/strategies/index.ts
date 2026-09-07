@@ -3,6 +3,7 @@ import { breakoutRetest } from './breakoutRetest';
 import { failedBreakout } from './failedBreakout';
 import { meanReversion } from './meanReversion';
 import { momentum } from './momentum';
+import { newsDrive } from './newsDrive';
 import { openingRange } from './openingRange';
 import { pullbackFade } from './pullbackFade';
 import { srBounce } from './srBounce';
@@ -15,6 +16,7 @@ export const STRATEGIES: Strategy[] = [
   pullbackFade,
   breakoutRetest,
   momentum,
+  newsDrive,
   vwapPullback,
   srBounce,
   meanReversion,

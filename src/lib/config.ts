@@ -40,16 +40,87 @@ export const CANDLE_DEPTH: Record<TimeframeRole, number> = {
   entry: 600,
 };
 
+/** Which headlines belong to an instrument, and where to look for them. */
+export interface NewsTopic {
+  /** Ids from NEWS_FEEDS, most specific source first. */
+  feeds: string[];
+  /** A headline counts for this instrument when it mentions one of these. */
+  match: string[];
+}
+
 export interface InstrumentConfig {
   id: string;
   epic: string;
   label: string;
+  news?: NewsTopic;
 }
 
 export const INSTRUMENTS: InstrumentConfig[] = [
-  { id: 'GOLD', epic: 'GOLD', label: 'GOLD' },
-  { id: 'BRENT', epic: 'OIL_BRENT', label: 'BRENT OIL' },
+  {
+    id: 'GOLD',
+    epic: 'GOLD',
+    label: 'GOLD',
+    news: {
+      feeds: ['investing-commodities', 'investing-commodity-news', 'fxstreet', 'marketwatch'],
+      match: ['gold', 'bullion', 'xau', 'precious metal', 'safe haven', 'safe-haven'],
+    },
+  },
+  {
+    id: 'BRENT',
+    epic: 'OIL_BRENT',
+    label: 'BRENT OIL',
+    news: {
+      feeds: ['oilprice', 'investing-commodities', 'investing-commodity-news', 'cnbc-energy', 'fxstreet'],
+      match: ['oil', 'brent', 'crude', 'wti', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
+    },
+  },
 ];
+
+/**
+ * Public headline feeds. All are keyless RSS, so nothing here depends on a
+ * paid data vendor; a feed that stops responding is simply skipped.
+ */
+export interface NewsFeedConfig {
+  id: string;
+  label: string;
+  url: string;
+}
+
+export const NEWS_FEEDS: NewsFeedConfig[] = [
+  { id: 'investing-commodities', label: 'Investing.com', url: 'https://www.investing.com/rss/commodities.rss' },
+  { id: 'investing-commodity-news', label: 'Investing.com', url: 'https://www.investing.com/rss/news_11.rss' },
+  { id: 'oilprice', label: 'OilPrice', url: 'https://oilprice.com/rss/main' },
+  { id: 'fxstreet', label: 'FXStreet', url: 'https://www.fxstreet.com/rss/news' },
+  { id: 'cnbc-energy', label: 'CNBC Energy', url: 'https://www.cnbc.com/id/10000664/device/rss/rss.html' },
+  { id: 'marketwatch', label: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/marketpulse/' },
+];
+
+/**
+ * Headline reading. Feeds publish every few minutes at best, so they are polled
+ * far more slowly than prices and the result is shared by every request.
+ */
+export const NEWS = {
+  /** How long a fetched feed stays usable before it is pulled again. */
+  cacheMs: 3 * 60_000,
+  /** How long a scored reading is reused, so a per-second poll is nearly free. */
+  pulseCacheMs: 20_000,
+  /** Give up on a slow feed rather than hold up the whole analysis. */
+  requestTimeoutMs: 8_000,
+  /** Headlines older than this are ignored entirely. */
+  windowHours: 12,
+  /** A headline's weight halves every this many hours. */
+  halfLifeHours: 3,
+  /** Recent window used to decide whether a story is breaking right now. */
+  freshHours: 2,
+  /** Fresh headlines per hour, over the window average, that counts as a burst. */
+  burstRatio: 2,
+  /** Sentiment past this counts as a real lean rather than noise. */
+  leanThreshold: 0.3,
+  /** Below this many matched headlines the reading is treated as unusable. */
+  minHeadlines: 3,
+  /** Headlines kept for display on a card. */
+  maxHeadlines: 4,
+} as const;
 
 /**
  * Equity indices traded on the daily mean-reversion signal.
@@ -147,7 +218,8 @@ export type StrategyKey =
   | 'mean-reversion'
   | 'failed-breakout'
   | 'opening-range'
-  | 'pullback-fade';
+  | 'pullback-fade'
+  | 'news-drive';
 
 /**
  * Tie-breaker order when several strategies fire at once. The lists differ per
@@ -159,6 +231,7 @@ export const STRATEGY_PRIORITY: Record<string, StrategyKey[]> = {
     'trend-pullback',
     'vwap-pullback',
     'breakout-retest',
+    'news-drive',
     'momentum',
     'sr-bounce',
     'failed-breakout',
@@ -169,6 +242,7 @@ export const STRATEGY_PRIORITY: Record<string, StrategyKey[]> = {
     'pullback-fade',
     'trend-pullback',
     'breakout-retest',
+    'news-drive',
     'momentum',
     'vwap-pullback',
     'sr-bounce',
@@ -268,10 +342,15 @@ export const DEFAULT_TUNING: StrategyTuning = {
    * all four independent measurements (both instruments x both halves of a
    * 21-day sample), so they are off by default. They are still in the codebase:
    * re-enable one here and run `scripts/lab.ts` to re-test it on fresh data.
+   *
+   * News momentum is on but cannot be measured that way: feeds only reach back
+   * a few hours, so the replay sees no headlines and the strategy produces
+   * nothing there. It is live-only by nature.
    */
   enabledStrategies: [
     'breakout-retest',
     'momentum',
+    'news-drive',
     'pullback-fade',
     'mean-reversion',
     'opening-range',

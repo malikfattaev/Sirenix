@@ -2,6 +2,7 @@ import { INDEX_INSTRUMENTS, INSTRUMENTS, type InstrumentConfig } from '@/lib/con
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
 import { getCandles } from '@/lib/market/candleCache';
 import { getHourlyCandles } from '@/lib/market/hourlyCache';
+import { getNewsPulse } from '@/lib/news';
 import { getQuotes, type Quote } from '@/lib/quotes';
 import { buildContext, decide, type Signal } from '@/lib/strategy';
 import { analyseSwing } from '@/lib/swing';
@@ -17,7 +18,7 @@ export async function analyseInstrument(
   instrument: InstrumentConfig,
   quote: Quote | undefined,
 ): Promise<Signal> {
-  const candles = await getCandles(instrument);
+  const [candles, news] = await Promise.all([getCandles(instrument), getNewsPulse(instrument)]);
   const now = Date.now();
   const lastCandle = candles.entry[candles.entry.length - 1];
 
@@ -52,6 +53,7 @@ export async function analyseInstrument(
     decimals,
     marketStatus,
     now,
+    news,
   });
 
   if (!context) {
@@ -63,6 +65,7 @@ export async function analyseInstrument(
       strategyLabel: null,
       regime: 'CHOP',
       vwap: null,
+      news,
       plan: null,
       reasons: ['The feed has not returned enough candles for a reliable read'],
       blockedBy: 'Not enough price history yet',
@@ -78,6 +81,7 @@ export async function analyseInstrument(
     strategyLabel: decision.strategyLabel,
     regime: context.regime,
     vwap: context.vwap,
+    news,
     plan: decision.plan,
     reasons: decision.reasons,
     blockedBy: decision.blockedBy,

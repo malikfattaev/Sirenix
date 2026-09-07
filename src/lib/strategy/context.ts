@@ -1,6 +1,7 @@
 import { SESSION, type TimeframeRole } from '@/lib/config';
 import { rangeOf, sessionVwap } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
+import type { NewsPulse } from '@/lib/news';
 import { openingRangeEnd, sessionStart } from '@/lib/market/session';
 import { detectRegime } from './regime';
 import { buildViews } from './views';
@@ -16,6 +17,12 @@ export interface ContextInput {
   decimals: number;
   marketStatus: string;
   now: number;
+  /**
+   * Omitted by the replay: feeds only reach back a few hours, so a backtest has
+   * no honest way to know what the wires were saying at the time. The news
+   * component then sits at neutral and the historical result stays comparable.
+   */
+  news?: NewsPulse | null;
 }
 
 /**
@@ -43,6 +50,7 @@ export function buildContext(input: ContextInput): MarketContext | null {
     regime,
     regimeReason,
     vwap: sessionVwap(views.setup.candles, start),
+    news: input.news ?? null,
     session: { start, openingRange: openingRange(views.entry.candles, input.now) },
   };
 }

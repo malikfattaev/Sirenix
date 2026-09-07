@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { NewsPulse } from '@/lib/news';
 import type { Quote } from '@/lib/quotes';
 import type { Signal } from '@/lib/strategy/types';
 import { price, regimeLabel, time } from './format';
@@ -28,6 +29,54 @@ function useTickDirection(value: number): 'up' | 'down' | null {
   }, [value]);
 
   return direction;
+}
+
+/** Compact headline read: which way the wires lean, and what they are saying. */
+function News({ pulse }: { pulse: NewsPulse }) {
+  const lean = pulse.sentiment > 0.05 ? 'BULLISH' : pulse.sentiment < -0.05 ? 'BEARISH' : 'MIXED';
+  const tone =
+    lean === 'BULLISH' ? 'text-long' : lean === 'BEARISH' ? 'text-short' : 'text-neutral-400';
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] uppercase tracking-wider text-muted">
+          News{pulse.burst ? ' · breaking' : ''}
+        </span>
+        <span className={`tabular text-[11px] font-medium ${tone}`}>
+          {lean} {pulse.sentiment > 0 ? '+' : ''}
+          {pulse.sentiment.toFixed(2)} · {pulse.count} stories
+        </span>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {pulse.headlines.map((headline) => (
+          <li key={headline.id} className="flex gap-2 text-[12px] leading-snug">
+            <span
+              className={`tabular shrink-0 ${
+                headline.sentiment > 0.05
+                  ? 'text-long'
+                  : headline.sentiment < -0.05
+                    ? 'text-short'
+                    : 'text-muted'
+              }`}
+            >
+              {headline.sentiment > 0 ? '+' : ''}
+              {headline.sentiment.toFixed(2)}
+            </span>
+            <a
+              href={headline.url}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate text-neutral-400 transition hover:text-neutral-200"
+              title={headline.title}
+            >
+              {headline.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function Row({ label, value, accent }: { label: string; value: string; accent?: string }) {
@@ -115,6 +164,8 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
           {signal.blockedBy ?? 'No setup right now'}
         </div>
       )}
+
+      {signal.news && signal.news.count > 0 && <News pulse={signal.news} />}
 
       <footer className="mt-4 flex justify-between text-[11px] text-muted">
         <span>{signal.vwap === null ? signal.epic : `VWAP ${price(signal.vwap, decimals)}`}</span>

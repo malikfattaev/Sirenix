@@ -87,6 +87,14 @@ export function scoreSetup(
     ? clamp((plan.riskReward - tuning.minRiskReward) / (3 - tuning.minRiskReward), 0, 1)
     : 0.4;
 
+  // Headlines are a tiebreaker, never a reason on their own: with no coverage
+  // the component sits at neutral, and it can only move the total by its weight.
+  const pulse = context.news;
+  const newsValue =
+    !pulse || pulse.confidence <= 0
+      ? 0.5
+      : clamp(0.5 + 0.5 * s * pulse.sentiment * pulse.confidence * (pulse.burst ? 1 : 0.7), 0, 1);
+
   const components: ScoreComponent[] = [
     { key: 'direction15m', label: '15m direction', weight: 12, value: directionVote },
     { key: 'trend5m', label: '5m trend', weight: 12, value: setupVote },
@@ -101,6 +109,7 @@ export function scoreSetup(
     { key: 'riskReward', label: 'Risk / reward', weight: 8, value: riskRewardValue },
     { key: 'setup', label: 'Setup quality', weight: 14, value: candidate.quality },
     { key: 'context1h', label: '1H context', weight: 5, value: hourlyVote },
+    { key: 'news', label: 'Headlines', weight: 6, value: newsValue },
   ];
 
   const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);

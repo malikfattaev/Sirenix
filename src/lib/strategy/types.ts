@@ -1,6 +1,7 @@
 import type { Regime, StrategyKey, Timeframe, TimeframeRole } from '@/lib/config';
 import type { Level, Pivot } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
+import type { NewsPulse } from '@/lib/news';
 
 export type Direction = 'LONG' | 'SHORT';
 export type SignalType = Direction | 'WAIT';
@@ -46,6 +47,8 @@ export interface MarketContext {
   regimeReason: string;
   /** Session-anchored VWAP on the setup frame, null before enough data. */
   vwap: number | null;
+  /** What the newswires are saying, or null when the instrument has no feeds. */
+  news: NewsPulse | null;
   session: { start: number; openingRange: { high: number; low: number } | null };
 }
 
@@ -126,6 +129,8 @@ export interface Signal {
   decimals: number;
   marketStatus: string;
   vwap: number | null;
+  /** Headline reading behind the signal, null when the market has no feeds. */
+  news: NewsPulse | null;
   plan: TradePlan | null;
   reasons: string[];
   /** Why the system is standing aside, when it is. */

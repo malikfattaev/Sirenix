@@ -64,6 +64,7 @@ export function analyseSwing(
     decimals,
     marketStatus: quote?.marketStatus ?? 'CLOSED',
     vwap: null,
+    news: null,
     regime: 'RANGE' as const,
     strategy: null,
     strategyLabel: null,
