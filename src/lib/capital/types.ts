@@ -37,8 +37,31 @@ export interface CapitalSnapshot {
 }
 
 export interface CapitalMarketDetails {
-  instrument: { epic: string; name: string; type: string; currency: string };
+  instrument: {
+    epic: string;
+    name: string;
+    type: string;
+    currency: string;
+    /**
+     * When the market actually trades, as ranges per weekday in the named zone.
+     * `marketStatus` keeps saying TRADEABLE outside them, so this is the only
+     * honest answer to why a price has stopped moving.
+     */
+    openingHours?: OpeningHours;
+  };
   snapshot: CapitalSnapshot;
+}
+
+/** `{ mon: ['00:00 - 17:30'], ..., zone: 'UTC' }` */
+export interface OpeningHours {
+  mon?: string[];
+  tue?: string[];
+  wed?: string[];
+  thu?: string[];
+  fri?: string[];
+  sat?: string[];
+  sun?: string[];
+  zone?: string;
 }
 
 /** Flat shape returned by the market search endpoint. */

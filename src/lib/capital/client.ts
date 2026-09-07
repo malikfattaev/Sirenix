@@ -14,6 +14,12 @@ const BASE_URLS = {
   demo: 'https://demo-api-capital.backend-capital.com',
 } as const;
 
+/** The live tick feed. Both environments are served from the same host. */
+export const STREAM_URL = 'wss://api-streaming-capital.backend-capital.com/connect';
+
+/** A request that has not answered in this long is treated as lost. */
+const REQUEST_TIMEOUT_MS = 12_000;
+
 /** Documented ceiling for a single /prices request. */
 const MAX_CANDLES_PER_REQUEST = 1000;
 /** Sessions expire after 10 minutes; renew early to avoid racing the boundary. */
@@ -24,7 +30,24 @@ const MIN_REQUEST_INTERVAL_MS = 130;
 const RATE_LIMIT_RETRIES = 4;
 const RATE_LIMIT_BACKOFF_MS = 1_500;
 
-interface Session {
+/**
+ * Fails a request that never answers.
+ *
+ * `fetch` waits forever by default. One socket left hanging is enough to stop a
+ * polling loop for good, which is how the board ends up frozen on a price from
+ * several minutes ago with nothing on screen to say so.
+ */
+async function withDeadline(run: (signal: AbortSignal) => Promise<Response>): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await run(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface Session {
   cst: string;
   securityToken: string;
   createdAt: number;
@@ -99,12 +122,15 @@ class CapitalClient {
     const { apiKey, identifier, password, baseUrl } = readCredentials();
 
     const response = await this.schedule(() =>
-      fetch(`${baseUrl}/api/v1/session`, {
-        method: 'POST',
-        headers: { 'X-CAP-API-KEY': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
-        cache: 'no-store',
-      }),
+      withDeadline((signal) =>
+        fetch(`${baseUrl}/api/v1/session`, {
+          method: 'POST',
+          headers: { 'X-CAP-API-KEY': apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, password }),
+          cache: 'no-store',
+          signal,
+        }),
+      ),
     );
 
     if (!response.ok) {
@@ -150,14 +176,17 @@ class CapitalClient {
     const session = await this.getSession();
 
     const response = await this.schedule(() =>
-      fetch(`${baseUrl}${path}`, {
-        headers: {
-          'X-CAP-API-KEY': apiKey,
-          CST: session.cst,
-          'X-SECURITY-TOKEN': session.securityToken,
-        },
-        cache: 'no-store',
-      }),
+      withDeadline((signal) =>
+        fetch(`${baseUrl}${path}`, {
+          headers: {
+            'X-CAP-API-KEY': apiKey,
+            CST: session.cst,
+            'X-SECURITY-TOKEN': session.securityToken,
+          },
+          cache: 'no-store',
+          signal,
+        }),
+      ),
     );
 
     if (response.status === 401 && retryOnAuthFailure) {
@@ -180,6 +209,11 @@ class CapitalClient {
       );
     }
     return body;
+  }
+
+  /** The session tokens, for the streaming socket, which authenticates the same way. */
+  tokens(forceRenew = false): Promise<Session> {
+    return this.getSession(forceRenew);
   }
 
   /** Live snapshot: bid/ask, market status and quoting precision. */
