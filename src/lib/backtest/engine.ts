@@ -221,9 +221,10 @@ function simulate(
 ): BacktestTrade | null {
   const isLong = direction === 'LONG';
   const s = isLong ? 1 : -1;
-  const spread = candles[signalIndex].spread;
-  // Filled at the signal bar's close, paying half the spread on the way in.
-  const entry = plan.entry + (s * spread) / 2;
+  // The plan already quotes the entry on the side of the book the trade fills
+  // on, so nothing more is charged here; the exits below are read off that same
+  // side rather than off the mid.
+  const entry = plan.entry;
   const risk = Math.abs(entry - plan.stopLoss);
   if (risk <= 0) return null;
 
@@ -240,13 +241,18 @@ function simulate(
 
   for (let i = signalIndex + 1; i <= lastIndex; i += 1) {
     const bar = candles[i];
+    // Mid candles, read as the side the position is closed on: a long exits by
+    // selling at the bid, half a spread below the mid it is drawn at.
+    const half = (isLong ? -1 : 1) * (bar.spread / 2);
+    const barHigh = bar.high + half;
+    const barLow = bar.low + half;
 
-    if (isLong ? bar.low <= stop : bar.high >= stop) {
+    if (isLong ? barLow <= stop : barHigh >= stop) {
       const total = banked + open * rOf(stop);
       return build(stop, total > 0 ? 'WIN' : 'LOSS', bar.closeTime, i, total);
     }
 
-    const targetHit = isLong ? bar.high >= plan.takeProfit : bar.low <= plan.takeProfit;
+    const targetHit = isLong ? barHigh >= plan.takeProfit : barLow <= plan.takeProfit;
     if (targetHit) {
       if (!exit.scaleOut || plan.takeProfit2 === null) {
         return build(plan.takeProfit, 'WIN', bar.closeTime, i, banked + open * rOf(plan.takeProfit));
@@ -261,14 +267,14 @@ function simulate(
     }
 
     if (scaledOut && plan.takeProfit2 !== null) {
-      const secondHit = isLong ? bar.high >= plan.takeProfit2 : bar.low <= plan.takeProfit2;
+      const secondHit = isLong ? barHigh >= plan.takeProfit2 : barLow <= plan.takeProfit2;
       if (secondHit) {
         const total = banked + open * rOf(plan.takeProfit2);
         return build(plan.takeProfit2, 'WIN', bar.closeTime, i, total);
       }
     }
 
-    best = isLong ? Math.max(best, bar.high) : Math.min(best, bar.low);
+    best = isLong ? Math.max(best, barHigh) : Math.min(best, barLow);
     const progress = (s * (best - entry)) / risk;
 
     if (exit.breakEvenAtR !== null && progress >= exit.breakEvenAtR) {
@@ -281,8 +287,9 @@ function simulate(
   }
 
   const final = candles[lastIndex];
-  const total = banked + open * rOf(final.close);
-  return build(final.close, 'TIMEOUT', final.closeTime, lastIndex, total);
+  const finalExit = final.close + (isLong ? -1 : 1) * (final.spread / 2);
+  const total = banked + open * rOf(finalExit);
+  return build(finalExit, 'TIMEOUT', final.closeTime, lastIndex, total);
 
   function build(
     exitPrice: number,

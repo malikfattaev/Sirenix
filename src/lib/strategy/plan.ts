@@ -26,17 +26,21 @@ export function buildPlan(
   const round = (value: number) => Number(value.toFixed(context.decimals));
 
   // --- Entry ---------------------------------------------------------------
+  // Levels are read off the mid, but the fill is on the other side of the book:
+  // a buy pays the ask. Quoting the mid as the entry understates the risk and
+  // overstates the reward by half a spread each, every trade.
+  const fill = price + (s * context.spread) / 2;
   const halfZone = 0.25 * entry.atr;
 
   // --- Stop ----------------------------------------------------------------
   let stopLoss = candidate.invalidation - s * tuning.stopBufferAtr * entry.atr;
-  let risk = Math.abs(price - stopLoss);
+  let risk = Math.abs(fill - stopLoss);
   const minRisk = Math.max(tuning.minStopAtr * setup.atr, tuning.minRiskToSpread * context.spread);
   const maxRisk = tuning.maxStopAtr * setup.atr;
 
   let stopReason = `Стоп ${format(round(stopLoss))} за уровнем, который отменяет сетап`;
   if (risk < minRisk) {
-    stopLoss = price - s * minRisk;
+    stopLoss = fill - s * minRisk;
     risk = minRisk;
     stopReason = `Стоп ${format(round(stopLoss))} расширен, чтобы вынести шум и спред`;
   }
@@ -69,7 +73,7 @@ export function buildPlan(
   const maxReward = tuning.maxTargetAtr * setup.atr;
   // Near enough to be reached in a scalp, far enough to be worth the spread.
   const takeProfit = ahead.find(
-    (value) => Math.abs(value - price) >= minReward && Math.abs(value - price) <= maxReward,
+    (value) => Math.abs(value - fill) >= minReward && Math.abs(value - fill) <= maxReward,
   );
 
   if (takeProfit === undefined) {
@@ -78,20 +82,20 @@ export function buildPlan(
       nearest === undefined
         ? 'впереди цены нет цели'
         : Math.abs(nearest - price) < minReward
-          ? `ближайшая цель даёт только 1:${(Math.abs(nearest - price) / risk).toFixed(1)}`
-          : `ближайшая цель в ${(Math.abs(nearest - price) / setup.atr).toFixed(1)} ATR, слишком далеко для скальпа`;
+          ? `ближайшая цель даёт только 1:${(Math.abs(nearest - fill) / risk).toFixed(1)}`
+          : `ближайшая цель в ${(Math.abs(nearest - fill) / setup.atr).toFixed(1)} ATR, слишком далеко для скальпа`;
     return { ok: false, detail: shortfall };
   }
 
   const takeProfit2 = ahead.find((value) => s * (value - takeProfit) > 0.3 * setup.atr) ?? null;
-  const riskReward = Math.abs(takeProfit - price) / risk;
+  const riskReward = Math.abs(takeProfit - fill) / risk;
 
   return {
     ok: true,
     plan: {
-      entryLow: round(price - halfZone),
-      entryHigh: round(price + halfZone),
-      entry: round(price),
+      entryLow: round(fill - halfZone),
+      entryHigh: round(fill + halfZone),
+      entry: round(fill),
       stopLoss: round(stopLoss),
       takeProfit: round(takeProfit),
       takeProfit2: takeProfit2 === null ? null : round(takeProfit2),
