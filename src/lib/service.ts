@@ -1,10 +1,41 @@
-import { INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
+import type { InstrumentConfig } from '@/lib/config';
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
+import { withPosition } from '@/lib/position';
+import { activeInstruments, activeTuning, horizonsFor } from '@/lib/settings';
 import { analyseIntraday } from '@/lib/intraday';
 import { getCandles } from '@/lib/market/candleCache';
 import { getNewsPulse } from '@/lib/news';
 import { getQuotes, type Quote } from '@/lib/quotes';
-import { buildContext, decide, type Signal } from '@/lib/strategy';
+import { buildContext, decide, STANDING_ASIDE, type Signal } from '@/lib/strategy';
+
+/**
+ * Refuses to issue anything on a price that cannot be traded on.
+ *
+ * Two different reasons a price stops moving, and they must not be confused. A
+ * sleeping market is normal and says when it wakes; a market whose session is
+ * running while the price stands still is a feed to distrust. Neither is
+ * something to open a trade on. A signal already running is left alone, so it
+ * still shows and can be managed to its stop or its target.
+ */
+function tradable(signal: Signal, quote: Quote | undefined): Signal {
+  if (!quote || (quote.open && !quote.stale)) return signal;
+
+  const cause = quote.open
+    ? `цена не обновляется ${Math.round(quote.age / 60_000)} мин, торговать по ней нельзя`
+    // The opening time is rendered on the card instead of written in here: it
+    // is a wall clock, and the server's is not the one the reader is looking at.
+    : 'рынок спит, торгов сейчас нет';
+
+  return {
+    ...signal,
+    type: 'WAIT',
+    score: 0,
+    strategy: null,
+    strategyLabel: null,
+    plan: null,
+    blockedBy: `${STANDING_ASIDE} ${cause}`,
+  };
+}
 
 /**
  * Produces the current signal for one instrument and files it in the history.
@@ -26,7 +57,7 @@ export async function analyseInstrument(
   const decimals = quote?.decimals ?? 2;
   const marketStatus = quote?.marketStatus ?? 'CLOSED';
 
-  resolveOpenSignals(instrument.id, 'scalp', candles.entry, now);
+  resolveOpenSignals(instrument.id, 'scalp', candles.entry, now, quote);
 
   const base = {
     instrumentId: instrument.id,
@@ -71,53 +102,69 @@ export async function analyseInstrument(
     };
   }
 
-  const decision = decide(context);
-  const signal: Signal = {
-    ...base,
-    type: decision.type,
-    score: decision.score,
-    strategy: decision.strategy,
-    strategyLabel: decision.strategyLabel,
-    regime: context.regime,
-    vwap: context.vwap,
-    news,
-    plan: decision.plan,
-    reasons: decision.reasons,
-    blockedBy: decision.blockedBy,
-  };
+  const decision = decide(context, activeTuning());
+
+  const signal = withPosition(
+    tradable(
+      {
+        ...base,
+        type: decision.type,
+        score: decision.score,
+        strategy: decision.strategy,
+        strategyLabel: decision.strategyLabel,
+        regime: context.regime,
+        vwap: context.vwap,
+        news,
+        plan: decision.plan,
+        reasons: decision.reasons,
+        blockedBy: decision.blockedBy,
+      },
+      quote,
+    ),
+  );
 
   recordSignal(signal);
   return signal;
 }
 
 /**
- * The whole board: each market read on both horizons, priced by one quote call.
+ * The whole board: each market on the horizons it runs, priced by one quote call.
  *
- * Ordered so the two scalping cards come first and the two hour-scale ones
- * follow, which is how the dashboard lays them out.
+ * Ordered market by market, each with its horizons in turn, so gold takes the
+ * first row of the board and Brent the second.
  */
 export async function analyseAllInstruments(): Promise<Signal[]> {
   const quotes = await getQuotes();
   const byId = new Map(quotes.map((quote) => [quote.instrumentId, quote]));
   const now = Date.now();
 
-  const [scalps, intraday] = await Promise.all([
-    Promise.all(
-      INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
-    ),
-    Promise.all(
-      INSTRUMENTS.map(async (instrument) => {
+  const instruments = activeInstruments();
+
+  const board = await Promise.all(
+    instruments.map(async (instrument) => {
+      const quote = byId.get(instrument.id);
+      const horizons = horizonsFor(instrument.id);
+
+      const scalp = horizons.includes('scalp')
+        ? await analyseInstrument(instrument, quote)
+        : null;
+
+      let intraday: Signal | null = null;
+      if (horizons.includes('intraday')) {
         // The 15-minute frame is already loaded for the minute-scale engine.
         const candles = (await getCandles(instrument)).direction;
-        // The 15m pass also carries anything left by a retired strategy: it has
-        // the deepest history, and a coarse bar is the conservative reading.
-        resolveOpenSignals(instrument.id, 'intraday', candles, now, true);
-        const signal = analyseIntraday(instrument, candles, byId.get(instrument.id), now);
-        recordSignal(signal);
-        return signal;
-      }),
-    ),
-  ]);
+        resolveOpenSignals(instrument.id, 'intraday', candles, now, quote);
+        intraday = withPosition(
+          tradable(analyseIntraday(instrument, candles, quote, now), quote),
+        );
+        recordSignal(intraday);
+      }
 
-  return [...scalps, ...intraday];
+      return [scalp, intraday].filter((signal) => signal !== null);
+    }),
+  );
+
+  // Grouped by market rather than by horizon, so a market keeps its own row on
+  // the two-column board instead of being split across two of them.
+  return board.flat();
 }

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { requireUser } from '@/lib/auth/session';
+import { errorResponse } from '@/lib/http';
 import { runBacktest } from '@/lib/backtest/engine';
 import { INSTRUMENTS, findInstrument } from '@/lib/config';
 
@@ -22,6 +24,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    await requireUser();
     // Sequential on purpose: each minute-scale run pulls thousands of candles.
     const results = [];
     for (const instrument of instruments) {
@@ -31,7 +34,6 @@ export async function GET(request: Request) {
     }
     return NextResponse.json({ days, results });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unexpected error';
-    return NextResponse.json({ error: message }, { status: 502 });
+    return errorResponse(error, 502);
   }
 }

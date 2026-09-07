@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { HORIZON_LABEL } from '@/lib/config';
-import type { NewsPulse } from '@/lib/news';
 import type { Quote } from '@/lib/quotes';
 import type { Signal } from '@/lib/strategy/types';
 import { price, regimeLabel, time } from './format';
@@ -32,54 +31,6 @@ function useTickDirection(value: number): 'up' | 'down' | null {
   return direction;
 }
 
-/** Compact headline read: which way the wires lean, and what they are saying. */
-function News({ pulse }: { pulse: NewsPulse }) {
-  const lean = pulse.sentiment > 0.05 ? 'ЗА РОСТ' : pulse.sentiment < -0.05 ? 'ЗА ПАДЕНИЕ' : 'СМЕШАННО';
-  const tone =
-    pulse.sentiment > 0.05 ? 'text-long' : pulse.sentiment < -0.05 ? 'text-short' : 'text-neutral-400';
-
-  return (
-    <div className="mt-4">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] uppercase tracking-wider text-muted">
-          Новости{pulse.burst ? ' · срочные' : ''}
-        </span>
-        <span className={`tabular text-[11px] font-medium ${tone}`}>
-          {lean} {pulse.sentiment > 0 ? '+' : ''}
-          {pulse.sentiment.toFixed(2)} · {pulse.count} новостей
-        </span>
-      </div>
-      <ul className="mt-2 space-y-1">
-        {pulse.headlines.map((headline) => (
-          <li key={headline.id} className="flex gap-2 text-[12px] leading-snug">
-            <span
-              className={`tabular shrink-0 ${
-                headline.sentiment > 0.05
-                  ? 'text-long'
-                  : headline.sentiment < -0.05
-                    ? 'text-short'
-                    : 'text-muted'
-              }`}
-            >
-              {headline.sentiment > 0 ? '+' : ''}
-              {headline.sentiment.toFixed(2)}
-            </span>
-            <a
-              href={headline.url}
-              target="_blank"
-              rel="noreferrer"
-              className="truncate text-neutral-400 transition hover:text-neutral-200"
-              title={headline.title}
-            >
-              {headline.title}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 function Row({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
@@ -100,6 +51,10 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
   const ask = quote?.ask ?? signal.ask;
   const spread = quote?.spread ?? signal.spread;
   const updatedAt = quote?.updatedAt ?? signal.updatedAt;
+  const asleep = quote ? !quote.open : false;
+  const stale = quote?.stale ?? false;
+  const staleFor = Math.round((quote?.age ?? 0) / 60_000);
+  const dim = asleep || stale;
 
   const tick = useTickDirection(current);
   const tickTone = tick === 'up' ? 'text-long' : tick === 'down' ? 'text-short' : '';
@@ -112,19 +67,49 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
             {signal.label} <span className="text-muted">· {HORIZON_LABEL[signal.horizon]}</span>
           </h2>
           <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
-            {/* The regime read belongs to the minute engine; the hour-scale one has none. */}
-            {[signal.horizon === 'scalp' ? regimeLabel(signal.regime) : null, signal.strategyLabel]
-              .filter(Boolean)
-              .join(' · ') || 'Momentum'}
+            {/* A sleeping market has no regime worth reading; say so instead. */}
+            {asleep
+              ? 'СПИТ'
+              : [signal.horizon === 'scalp' ? regimeLabel(signal.regime) : null, signal.strategyLabel]
+                  .filter(Boolean)
+                  .join(' · ') || 'Momentum'}
           </p>
         </div>
+        {/*
+          The two prices the platform itself shows, named the way it names them.
+          The middle of the spread is what the chart and every level are drawn
+          on, but it is a price nobody trades at: showing it large is what makes
+          this board look like it disagrees with Capital.com.
+        */}
         <div className="text-right">
-          <div className={`tabular text-2xl font-semibold transition-colors duration-150 ${tickTone}`}>
-            {price(current, decimals)}
+          <div className={`flex items-baseline justify-end gap-4 ${dim ? 'text-muted' : ''}`}>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">продажа</div>
+              <div
+                className={`tabular text-xl font-semibold transition-colors duration-150 ${dim ? '' : tickTone}`}
+              >
+                {price(bid, decimals)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">покупка</div>
+              <div
+                className={`tabular text-xl font-semibold transition-colors duration-150 ${dim ? '' : tickTone}`}
+              >
+                {price(ask, decimals)}
+              </div>
+            </div>
           </div>
-          <div className="tabular text-[11px] text-muted">
-            {price(bid, decimals)} / {price(ask, decimals)} · спред {price(spread, decimals)}
+          <div className="tabular mt-1 text-[11px] text-muted">
+            спред {price(spread, decimals)} · середина {price(current, decimals)}
           </div>
+          {asleep ? (
+            <div className="text-[11px] text-muted">
+              спит{quote?.opensAt ? ` · откроется в ${time(quote.opensAt).slice(0, 5)}` : ''}
+            </div>
+          ) : (
+            stale && <div className="text-[11px] text-short">не обновляется {staleFor} мин</div>
+          )}
         </div>
       </header>
 
@@ -134,7 +119,12 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
           {tone.word}
         </span>
         {signal.type !== 'WAIT' && (
-          <span className="tabular text-lg font-medium text-neutral-400">{signal.score}/100</span>
+          <span
+            className="tabular text-[12px] text-muted"
+            title="Сколько факторов сошлось: направление старших таймфреймов, уровни, VWAP, импульс, волатильность, новости. Это не вероятность прибыли."
+          >
+            совпало {signal.score} из 100
+          </span>
         )}
       </div>
 
@@ -168,11 +158,23 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
         </div>
       )}
 
-      {signal.news && signal.news.count > 0 && <News pulse={signal.news} />}
+      {signal.note && (
+        <p
+          className={`mt-3 rounded-lg border px-3 py-2 text-[12px] leading-snug ${
+            signal.note.includes('поздно')
+              ? 'border-short/40 bg-short/10 text-short'
+              : 'border-edge bg-surface-raised text-muted'
+          }`}
+        >
+          {signal.note}
+        </p>
+      )}
 
       <footer className="mt-4 flex justify-between text-[11px] text-muted">
         <span>{signal.vwap === null ? signal.epic : `VWAP ${price(signal.vwap, decimals)}`}</span>
-        <span>{time(updatedAt)}</span>
+        <span>
+          {quote?.source === 'stream' ? 'поток' : 'снимок'} · {time(updatedAt)}
+        </span>
       </footer>
     </section>
   );
