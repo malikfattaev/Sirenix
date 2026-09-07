@@ -34,7 +34,10 @@ export interface UniverseEntry {
 }
 
 export const UNIVERSE: UniverseEntry[] = [
-  ...(['US30', 'US500', 'US100', 'DE40', 'UK100', 'FR40', 'NL25', 'J225', 'RTY', 'HK50', 'SW20', 'SP35', 'AU200'] as const).map(
+  ...([
+    'US30', 'US500', 'US100', 'DE40', 'UK100', 'FR40', 'NL25', 'J225', 'RTY',
+    'HK50', 'SW20', 'SP35', 'AU200', 'HSTECH', 'HSCE', 'CN50',
+  ] as const).map(
     (epic) => ({ epic, type: 'INDICES' as const }),
   ),
   ...([

@@ -60,8 +60,10 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
         <div>
           <h2 className="text-sm font-semibold tracking-[0.2em] text-neutral-300">{signal.label}</h2>
           <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
-            {regimeLabel(signal.regime)}
-            {signal.strategyLabel ? ` · ${signal.strategyLabel}` : ''}
+            {/* The regime read belongs to the scalping engine; a daily fade has none. */}
+            {[signal.horizon === 'scalp' ? regimeLabel(signal.regime) : null, signal.strategyLabel]
+              .filter(Boolean)
+              .join(' · ') || 'Daily reversion'}
           </p>
         </div>
         <div className="text-right">
@@ -115,7 +117,7 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
       )}
 
       <footer className="mt-4 flex justify-between text-[11px] text-muted">
-        <span>VWAP {price(signal.vwap, decimals)}</span>
+        <span>{signal.vwap === null ? signal.epic : `VWAP ${price(signal.vwap, decimals)}`}</span>
         <span>{time(updatedAt)}</span>
       </footer>
     </section>

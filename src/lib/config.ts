@@ -51,9 +51,64 @@ export const INSTRUMENTS: InstrumentConfig[] = [
   { id: 'BRENT', epic: 'OIL_BRENT', label: 'BRENT OIL' },
 ];
 
+/**
+ * Equity indices traded on the daily mean-reversion signal.
+ *
+ * Research across 47 markets found that only equity indices, at a holding
+ * period of a day or two, produce an effect large enough to clear the spread.
+ * They are cheap to trade (under 5 bps) and move together enough that a sharp
+ * one-day move tends to be partly given back.
+ */
+export const INDEX_INSTRUMENTS: InstrumentConfig[] = [
+  { id: 'US30', epic: 'US30', label: 'US 30' },
+  { id: 'US500', epic: 'US500', label: 'US 500' },
+  { id: 'US100', epic: 'US100', label: 'US TECH 100' },
+  { id: 'RTY', epic: 'RTY', label: 'RUSSELL 2000' },
+  { id: 'DE40', epic: 'DE40', label: 'GERMANY 40' },
+  { id: 'UK100', epic: 'UK100', label: 'UK 100' },
+  { id: 'FR40', epic: 'FR40', label: 'FRANCE 40' },
+  { id: 'NL25', epic: 'NL25', label: 'NETHERLANDS 25' },
+  { id: 'SP35', epic: 'SP35', label: 'SPAIN 35' },
+  { id: 'SW20', epic: 'SW20', label: 'SWITZERLAND 20' },
+  { id: 'J225', epic: 'J225', label: 'JAPAN 225' },
+  { id: 'HK50', epic: 'HK50', label: 'HONG KONG 50' },
+  { id: 'HSTECH', epic: 'HSTECH', label: 'HK TECH' },
+  { id: 'HSCE', epic: 'HSCE', label: 'CHINA H-SHARES' },
+  { id: 'CN50', epic: 'CN50', label: 'CHINA A50' },
+  { id: 'AU200', epic: 'AU200', label: 'AUSTRALIA 200' },
+];
+
+export const ALL_INSTRUMENTS: InstrumentConfig[] = [...INSTRUMENTS, ...INDEX_INSTRUMENTS];
+
 export function findInstrument(id: string): InstrumentConfig | undefined {
-  return INSTRUMENTS.find((instrument) => instrument.id.toLowerCase() === id.toLowerCase());
+  return ALL_INSTRUMENTS.find((instrument) => instrument.id.toLowerCase() === id.toLowerCase());
 }
+
+/**
+ * The daily mean-reversion signal, settled by a grid search that only accepted
+ * settings profitable in *both* halves of a seven-month, sixteen-index sample.
+ *
+ * Backtest at these values: 2014 trades, 62.8% win rate, +0.029R per trade,
+ * 11 of 16 indices and 13 of 20 months positive. Pulling the target closer
+ * raises the win rate and destroys the profit: at 2.0 ATR the win rate reaches
+ * 70% but the first half of the sample loses money, and at 1.0 ATR the win rate
+ * is 83% and the total return is zero.
+ */
+export const SWING = {
+  /** Hours of price change the fade score is measured over. */
+  lookbackHours: 24,
+  /** Minimum absolute fade score before a signal is issued. */
+  scoreThreshold: 1.3,
+  /** Stop and target as multiples of hourly ATR. Reversion needs a wide stop. */
+  stopAtr: 6,
+  targetAtr: 3,
+  /** Positions are closed at market after this long. */
+  holdHours: 48,
+  /** Hourly candles to load per instrument. */
+  candleDepth: 300,
+  /** Fade score that maps to a displayed strength of 100. */
+  scoreCeiling: 3.0,
+} as const;
 
 export const INDICATORS = {
   emaFast: 9,
@@ -223,8 +278,21 @@ export const DEFAULT_TUNING: StrategyTuning = {
   ],
 };
 
-/** How long a live signal stays on the board before it is marked expired. */
-export const SIGNAL_LIFETIME_MS = 30 * 60_000;
+/**
+ * How long a signal stays open before it is settled at market. A scalp that has
+ * not resolved in half an hour is stale; a daily fade is given its full holding
+ * period, because overshooting first is exactly how the setup behaves.
+ */
+export const SIGNAL_LIFETIME_MS: Record<'scalp' | 'swing', number> = {
+  scalp: 30 * 60_000,
+  swing: SWING.holdHours * 60 * 60_000,
+};
+
+/** Two signals of the same shape inside this window count as one. */
+export const DEDUPE_WINDOW_MS: Record<'scalp' | 'swing', number> = {
+  scalp: 10 * 60_000,
+  swing: 6 * 60 * 60_000,
+};
 
 /**
  * Prices are polled far more often than the analysis: quotes move continuously,

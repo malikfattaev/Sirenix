@@ -31,6 +31,36 @@ function usePoll(task: () => Promise<void>, intervalMs: number) {
   }, [task, intervalMs]);
 }
 
+function Board({
+  title,
+  note,
+  signals,
+  quotes,
+}: {
+  title: string;
+  note?: string;
+  signals: Signal[];
+  quotes: Record<string, Quote>;
+}) {
+  return (
+    <section className="mt-8">
+      <h2 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">{title}</h2>
+      {note && <p className="mt-1 text-[11px] text-muted">{note}</p>}
+      {signals.length === 0 ? (
+        <p className="mt-3 rounded-xl border border-edge bg-surface px-4 py-3 text-[13px] text-muted">
+          Nothing here right now.
+        </p>
+      ) : (
+        <div className="mt-3 grid gap-4 md:grid-cols-2">
+          {signals.map((signal) => (
+            <SignalCard key={signal.instrumentId} signal={signal} quote={quotes[signal.instrumentId]} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function Dashboard() {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
@@ -70,6 +100,11 @@ export function Dashboard() {
   usePoll(refreshQuotes, PRICE_REFRESH_INTERVAL_MS);
   usePoll(refreshSignals, SIGNAL_REFRESH_INTERVAL_MS);
 
+  // Anything actionable comes first; the rest collapses into a watch list.
+  const active = signals.filter((signal) => signal.horizon === 'swing' && signal.type !== 'WAIT');
+  const scalps = signals.filter((signal) => signal.horizon === 'scalp');
+  const waiting = signals.filter((signal) => signal.horizon === 'swing' && signal.type === 'WAIT');
+
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
       <header>
@@ -82,19 +117,43 @@ export function Dashboard() {
         </p>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {signals.length === 0 && !error
-          ? [0, 1].map((index) => (
-              <div key={index} className="h-64 animate-pulse rounded-xl border border-edge bg-surface" />
-            ))
-          : signals.map((signal) => (
-              <SignalCard
-                key={signal.instrumentId}
-                signal={signal}
-                quote={quotes[signal.instrumentId]}
-              />
-            ))}
-      </div>
+      {signals.length === 0 && !error ? (
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {[0, 1].map((index) => (
+            <div key={index} className="h-64 animate-pulse rounded-xl border border-edge bg-surface" />
+          ))}
+        </div>
+      ) : (
+        <>
+          <Board
+            title="INDICES · DAILY REVERSION"
+            note="Fades a sharp one-day move. Backtest: 62.8% win rate over 2014 trades, closed after 48h."
+            signals={active}
+            quotes={quotes}
+          />
+          <Board title="SCALPING" signals={scalps} quotes={quotes} />
+          {waiting.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-[11px] uppercase tracking-[0.2em] text-muted">
+                Watching · {waiting.length}
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {waiting.map((signal) => (
+                  <span
+                    key={signal.instrumentId}
+                    className="tabular rounded-lg border border-edge bg-surface px-3 py-1.5 text-[12px] text-muted"
+                  >
+                    {signal.label}{' '}
+                    <span className="text-neutral-400">
+                      {(quotes[signal.instrumentId]?.price ?? signal.price).toFixed(signal.decimals)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      )}
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold tracking-[0.15em] text-neutral-300">RECENT SIGNALS</h2>

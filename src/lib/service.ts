@@ -1,8 +1,10 @@
-import { INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
+import { INDEX_INSTRUMENTS, INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
 import { getCandles } from '@/lib/market/candleCache';
+import { getHourlyCandles } from '@/lib/market/hourlyCache';
 import { getQuotes, type Quote } from '@/lib/quotes';
 import { buildContext, decide, type Signal } from '@/lib/strategy';
+import { analyseSwing } from '@/lib/swing';
 
 /**
  * Produces the current signal for one instrument and files it in the history.
@@ -30,6 +32,7 @@ export async function analyseInstrument(
     instrumentId: instrument.id,
     epic: instrument.epic,
     label: instrument.label,
+    horizon: 'scalp' as const,
     price,
     bid: quote?.bid ?? null,
     ask: quote?.ask ?? null,
@@ -84,11 +87,29 @@ export async function analyseInstrument(
   return signal;
 }
 
-/** Current signals for every configured instrument, priced off one quote call. */
+/**
+ * The whole board: minute-scale setups on gold and oil, and the daily
+ * mean-reversion read on the index universe. One quote call prices both.
+ */
 export async function analyseAllInstruments(): Promise<Signal[]> {
   const quotes = await getQuotes();
   const byId = new Map(quotes.map((quote) => [quote.instrumentId, quote]));
-  return Promise.all(
-    INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
-  );
+  const now = Date.now();
+
+  const [scalps, swings] = await Promise.all([
+    Promise.all(
+      INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
+    ),
+    Promise.all(
+      INDEX_INSTRUMENTS.map(async (instrument) => {
+        const candles = await getHourlyCandles(instrument);
+        resolveOpenSignals(instrument.id, candles, now);
+        const signal = analyseSwing(instrument, candles, byId.get(instrument.id), now);
+        recordSignal(signal);
+        return signal;
+      }),
+    ),
+  ]);
+
+  return [...scalps, ...swings];
 }

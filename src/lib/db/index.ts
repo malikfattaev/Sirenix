@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { SIGNAL_LIFETIME_MS } from '@/lib/config';
+import { DEDUPE_WINDOW_MS, SIGNAL_LIFETIME_MS } from '@/lib/config';
 import type { Candle } from '@/lib/market/candles';
 import type { Signal } from '@/lib/strategy';
 
@@ -15,6 +15,7 @@ export interface SignalRecord {
   strategy: string;
   score: number;
   regime: string;
+  horizon: string;
   entry: number;
   entryLow: number;
   entryHigh: number;
@@ -39,6 +40,7 @@ interface Row {
   strategy: string;
   score: number;
   regime: string;
+  horizon: string;
   entry: number;
   entry_low: number;
   entry_high: number;
@@ -54,9 +56,6 @@ interface Row {
 }
 
 const DB_PATH = process.env.DATABASE_PATH ?? path.join(process.cwd(), 'data', 'signals.db');
-
-/** Two signals of the same shape inside this window count as one. */
-const DEDUPE_WINDOW_MS = 10 * 60_000;
 
 let instance: Database.Database | null = null;
 
@@ -74,6 +73,7 @@ function db(): Database.Database {
       strategy       TEXT    NOT NULL,
       score          INTEGER NOT NULL,
       regime         TEXT    NOT NULL,
+      horizon        TEXT    NOT NULL DEFAULT 'scalp',
       entry          REAL    NOT NULL,
       entry_low      REAL    NOT NULL,
       entry_high     REAL    NOT NULL,
@@ -101,6 +101,7 @@ const toRecord = (row: Row): SignalRecord => ({
   strategy: row.strategy,
   score: row.score,
   regime: row.regime,
+  horizon: row.horizon,
   entry: row.entry,
   entryLow: row.entry_low,
   entryHigh: row.entry_high,
@@ -134,7 +135,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       signal.instrumentId,
       signal.type,
       signal.strategy,
-      signal.updatedAt - DEDUPE_WINDOW_MS,
+      signal.updatedAt - DEDUPE_WINDOW_MS[signal.horizon],
     ) as Row | undefined;
   if (existing) return toRecord(existing);
 
@@ -142,10 +143,10 @@ export function recordSignal(signal: Signal): SignalRecord | null {
   const result = db()
     .prepare(
       `INSERT INTO signals (
-         instrument_id, label, direction, strategy, score, regime,
+         instrument_id, label, direction, strategy, score, regime, horizon,
          entry, entry_low, entry_high, stop_loss, take_profit, take_profit_2,
          risk_reward, decimals, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       signal.instrumentId,
@@ -154,6 +155,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       signal.strategy,
       signal.score,
       signal.regime,
+      signal.horizon,
       plan.entry,
       plan.entryLow,
       plan.entryHigh,
@@ -209,7 +211,8 @@ export function resolveOpenSignals(instrumentId: string, candles: Candle[], now:
       }
     }
 
-    if (!outcome && now - row.created_at > SIGNAL_LIFETIME_MS) {
+    const lifetime = SIGNAL_LIFETIME_MS[row.horizon === 'swing' ? 'swing' : 'scalp'];
+    if (!outcome && now - row.created_at > lifetime) {
       const last = since[since.length - 1];
       if (last) outcome = { status: 'EXPIRED', price: last.close, at: now };
     }

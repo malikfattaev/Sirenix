@@ -1,5 +1,5 @@
 import { capital } from '@/lib/capital/client';
-import { INSTRUMENTS, QUOTE_CACHE_MS } from '@/lib/config';
+import { ALL_INSTRUMENTS, QUOTE_CACHE_MS } from '@/lib/config';
 
 /** The live price data the dashboard refreshes every second. */
 export interface Quote {
@@ -45,10 +45,10 @@ export function getQuotes(): Promise<Quote[]> {
 }
 
 async function fetchQuotes(): Promise<Quote[]> {
-  const details = await capital.getMarkets(INSTRUMENTS.map((instrument) => instrument.epic));
+  const details = await capital.getMarkets(ALL_INSTRUMENTS.map((instrument) => instrument.epic));
   const now = Date.now();
 
-  return INSTRUMENTS.flatMap((instrument) => {
+  return ALL_INSTRUMENTS.flatMap((instrument) => {
     const market = details.find((entry) => entry.instrument.epic === instrument.epic);
     if (!market) return [];
 
