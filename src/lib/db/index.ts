@@ -11,7 +11,15 @@ import {
 import type { Candle } from '@/lib/market/candles';
 import type { Signal } from '@/lib/strategy';
 
-export type SignalStatus = 'OPEN' | 'WIN' | 'LOSS' | 'EXPIRED';
+/**
+ * How a signal ended.
+ *
+ * EXPIRED means it ran its full holding time and was settled at the market
+ * price, so it carries a result. CANCELLED means the strategy behind it was
+ * removed before price ever reached the stop or the target, so there is no
+ * result to report and pretending otherwise would falsify the record.
+ */
+export type SignalStatus = 'OPEN' | 'WIN' | 'LOSS' | 'EXPIRED' | 'CANCELLED';
 
 export interface SignalRecord {
   id: number;
@@ -98,15 +106,22 @@ function db(): Database.Database {
   `);
 
   // A horizon that no longer exists has nothing left to settle its rows, so
-  // they would sit open forever. Close them as unresolved rather than pretend
-  // they won or lost, and leave the rows themselves in place.
+  // they would sit open forever. Mark them cancelled, which says exactly what
+  // happened: the strategy went away before price answered. The rows stay.
   const horizons = Object.keys(HORIZON_LABEL);
+  const placeholders = horizons.map(() => '?').join(', ');
   instance
     .prepare(
-      `UPDATE signals SET status = 'EXPIRED', closed_at = ?
-        WHERE status = 'OPEN' AND horizon NOT IN (${horizons.map(() => '?').join(', ')})`,
+      `UPDATE signals SET status = 'CANCELLED', closed_at = ?
+        WHERE status = 'OPEN' AND horizon NOT IN (${placeholders})`,
     )
     .run(Date.now(), ...horizons);
+
+  // Earlier builds closed those same rows as EXPIRED, which reads as "held to
+  // the end and settled" and is wrong. A real expiry always records a result.
+  instance
+    .prepare("UPDATE signals SET status = 'CANCELLED' WHERE status = 'EXPIRED' AND result_r IS NULL")
+    .run();
 
   return instance;
 }

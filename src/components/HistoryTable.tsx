@@ -6,6 +6,13 @@ const STATUS_TONE: Record<SignalRecord['status'], string> = {
   WIN: 'text-long',
   LOSS: 'text-short',
   EXPIRED: 'text-muted',
+  CANCELLED: 'text-muted',
+};
+
+/** Shown instead of the raw status where the word alone would mislead. */
+const STATUS_LABEL: Partial<Record<SignalRecord['status'], string>> = {
+  EXPIRED: 'CLOSED AT TIME',
+  CANCELLED: 'NOT EVALUATED',
 };
 
 export function HistoryTable({ signals }: { signals: SignalRecord[] }) {
@@ -46,7 +53,7 @@ export function HistoryTable({ signals }: { signals: SignalRecord[] }) {
               <td className="tabular px-4 py-2.5 text-right">{price(signal.stopLoss, signal.decimals)}</td>
               <td className="tabular px-4 py-2.5 text-right">{price(signal.takeProfit, signal.decimals)}</td>
               <td className={`tabular px-4 py-2.5 text-right ${STATUS_TONE[signal.status]}`}>
-                {signal.status}
+                {STATUS_LABEL[signal.status] ?? signal.status}
                 {signal.resultR === null ? '' : ` ${signal.resultR > 0 ? '+' : ''}${signal.resultR}R`}
               </td>
               <td className="tabular px-4 py-2.5 text-right text-muted">{dateTime(signal.createdAt)}</td>
