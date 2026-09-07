@@ -1,4 +1,5 @@
 import {
+  DEFAULT_STRATEGY_PRIORITY,
   DEFAULT_TUNING,
   STRATEGY_PRIORITY,
   type StrategyKey,
@@ -124,7 +125,7 @@ export function decide(
     ]);
   }
 
-  const priority = STRATEGY_PRIORITY[context.instrumentId] ?? [];
+  const priority = STRATEGY_PRIORITY[context.instrumentId] ?? DEFAULT_STRATEGY_PRIORITY;
   const best = evaluated.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return priority.indexOf(a.candidate.strategy) - priority.indexOf(b.candidate.strategy);

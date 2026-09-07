@@ -74,6 +74,48 @@ export const INSTRUMENTS: InstrumentConfig[] = [
       match: ['oil', 'brent', 'crude', 'wti', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
     },
   },
+  {
+    id: 'WTI',
+    epic: 'OIL_CRUDE',
+    label: 'WTI CRUDE',
+    news: {
+      feeds: ['oilprice', 'investing-commodities', 'investing-commodity-news', 'cnbc-energy', 'fxstreet'],
+      match: ['oil', 'wti', 'crude', 'brent', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
+    },
+  },
+  {
+    id: 'US30',
+    epic: 'US30',
+    label: 'US 30',
+    news: {
+      feeds: ['investing-stocks', 'investing-economy', 'cnbc-markets', 'marketwatch'],
+      match: [
+        'dow', 'dow jones', 'wall street', 'stocks', 'stock market', 'equities',
+        's&p', 'blue chip', 'fed', 'payrolls', 'inflation', 'rate cut', 'rate hike',
+      ],
+    },
+  },
+  {
+    id: 'US100',
+    epic: 'US100',
+    label: 'US TECH 100',
+    news: {
+      feeds: ['investing-stocks', 'investing-economy', 'cnbc-markets', 'marketwatch'],
+      match: [
+        'nasdaq', 'tech stock', 'tech stocks', 'wall street', 'stocks', 'equities',
+        'semiconductor', 'chipmaker', 'megacap', 'fed', 'rate cut', 'rate hike',
+      ],
+    },
+  },
+  {
+    id: 'USDJPY',
+    epic: 'USDJPY',
+    label: 'USD/JPY',
+    news: {
+      feeds: ['fxstreet', 'investing-economy', 'marketwatch'],
+      match: ['yen', 'usd/jpy', 'usdjpy', 'dollar', 'bank of japan', 'boj'],
+    },
+  },
 ];
 
 /**
@@ -92,7 +134,10 @@ export const NEWS_FEEDS: NewsFeedConfig[] = [
   { id: 'oilprice', label: 'OilPrice', url: 'https://oilprice.com/rss/main' },
   { id: 'fxstreet', label: 'FXStreet', url: 'https://www.fxstreet.com/rss/news' },
   { id: 'cnbc-energy', label: 'CNBC Energy', url: 'https://www.cnbc.com/id/10000664/device/rss/rss.html' },
-  { id: 'marketwatch', label: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/marketpulse/' },
+  { id: 'cnbc-markets', label: 'CNBC Markets', url: 'https://www.cnbc.com/id/20910258/device/rss/rss.html' },
+  { id: 'investing-stocks', label: 'Investing.com', url: 'https://www.investing.com/rss/news_25.rss' },
+  { id: 'investing-economy', label: 'Investing.com', url: 'https://www.investing.com/rss/news_1.rss' },
+  { id: 'marketwatch', label: 'MarketWatch', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories' },
 ];
 
 /**
@@ -169,9 +214,23 @@ export type StrategyKey =
   | 'news-drive';
 
 /**
- * Tie-breaker order when several strategies fire at once. The lists differ per
- * instrument because gold and oil do not behave the same way.
+ * Tie-breaker order when several strategies fire at once, used only when two
+ * setups score the same. Gold and oil have measured orders of their own; every
+ * other market falls back to the generic one.
  */
+export const DEFAULT_STRATEGY_PRIORITY: StrategyKey[] = [
+  'pullback-fade',
+  'breakout-retest',
+  'news-drive',
+  'momentum',
+  'trend-pullback',
+  'vwap-pullback',
+  'sr-bounce',
+  'failed-breakout',
+  'opening-range',
+  'mean-reversion',
+];
+
 export const STRATEGY_PRIORITY: Record<string, StrategyKey[]> = {
   GOLD: [
     'pullback-fade',

@@ -23,9 +23,12 @@ const decodeEntities = (text: string): string =>
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&#0?39;|&apos;|&#x27;/gi, "'")
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&apos;/gi, "'")
+    .replace(/&nbsp;/gi, ' ')
+    // Numeric references, decimal and hexadecimal: publishers use both, often
+    // for the curly quotes and dashes that fill financial headlines.
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
     .replace(/&amp;/g, '&');
 
 /** Strips markup a feed may leave inside a description. */

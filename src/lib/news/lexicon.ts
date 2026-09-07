@@ -18,6 +18,10 @@ const BULLISH: [string, number][] = [
   ['rallies', 0.9], ['rally', 0.9], ['jumps', 0.9], ['jump', 0.9], ['rockets', 1.0],
   ['climbs', 0.8], ['climb', 0.8], ['rises', 0.8], ['rise', 0.7], ['rising', 0.7],
   ['gains', 0.7], ['gain', 0.6], ['advances', 0.6], ['advance', 0.5],
+  // Past tense, which is how a wire reports a move that has already happened.
+  ['surged', 1.0], ['soared', 1.0], ['rallied', 0.9], ['jumped', 0.9], ['spiked', 1.0],
+  ['climbed', 0.8], ['rose', 0.8], ['gained', 0.7], ['advanced', 0.5], ['topped', 0.7],
+  ['beat expectations', 0.8], ['better than expected', 0.7], ['stronger than expected', 0.7],
   ['extends gains', 1.0], ['tops', 0.7], ['breaks above', 0.9], ['breaks out', 0.8],
   ['higher', 0.6], ['firmer', 0.6], ['strengthens', 0.7], ['strengthen', 0.6],
   ['rebounds', 0.7], ['rebound', 0.6], ['recovers', 0.6], ['upside', 0.5],
@@ -48,6 +52,11 @@ const BEARISH: [string, number][] = [
   ['sinks', 0.8], ['sink', 0.8], ['slides', 0.8], ['slide', 0.7],
   ['falls', 0.8], ['fall', 0.6], ['drops', 0.8], ['drop', 0.6], ['declines', 0.7],
   ['decline', 0.6], ['retreats', 0.6], ['retreat', 0.5], ['eases', 0.5], ['ease', 0.4],
+  // Past tense, which is how a wire reports a move that has already happened.
+  ['plunged', 1.0], ['tumbled', 0.9], ['slumped', 0.9], ['sank', 0.8], ['slid', 0.8],
+  ['fell', 0.8], ['dropped', 0.8], ['declined', 0.7], ['retreated', 0.6], ['slipped', 0.6],
+  ['eased', 0.4], ['weakened', 0.7], ['missed expectations', 0.8], ['worse than expected', 0.7],
+  ['weaker than expected', 0.7],
   ['extends losses', 1.0], ['losses', 0.5], ['lower', 0.6], ['weakens', 0.7],
   ['weaker', 0.6], ['softens', 0.5], ['under pressure', 0.7], ['pressured', 0.6],
   ['selloff', 0.9], ['sell-off', 0.9], ['profit taking', 0.6], ['profit-taking', 0.6],
