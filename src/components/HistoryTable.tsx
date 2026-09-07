@@ -1,3 +1,4 @@
+import { HORIZON_LABEL, type Horizon } from '@/lib/config';
 import type { SignalRecord } from '@/lib/db';
 import { dateTime, price } from './format';
 
@@ -8,6 +9,15 @@ const STATUS_TONE: Record<SignalRecord['status'], string> = {
   EXPIRED: 'text-muted',
   CANCELLED: 'text-muted',
 };
+
+/**
+ * Two horizons run on the same market at once, so the same instrument can
+ * appear twice within seconds on completely different terms. Naming the horizon
+ * is what tells those rows apart. A signal left by a strategy that has since
+ * been removed is marked as such rather than silently looking current.
+ */
+const horizonOf = (record: SignalRecord): string =>
+  HORIZON_LABEL[record.horizon as Horizon] ?? 'RETIRED';
 
 /** Shown instead of the raw status where the word alone would mislead. */
 const STATUS_LABEL: Partial<Record<SignalRecord['status'], string>> = {
@@ -42,7 +52,9 @@ export function HistoryTable({ signals }: { signals: SignalRecord[] }) {
         <tbody className="divide-y divide-edge">
           {signals.map((signal) => (
             <tr key={signal.id}>
-              <td className="px-4 py-2.5 text-neutral-300">{signal.label}</td>
+              <td className="px-4 py-2.5 text-neutral-300">
+                {signal.label} <span className="text-[11px] text-muted">· {horizonOf(signal)}</span>
+              </td>
               <td
                 className={`px-4 py-2.5 font-medium ${signal.direction === 'LONG' ? 'text-long' : 'text-short'}`}
               >
