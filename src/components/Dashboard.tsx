@@ -44,11 +44,15 @@ function Board({
     <section className="mt-6">
       <div className="grid gap-4 md:grid-cols-2">
         {loading &&
-          [0, 1].map((index) => (
+          [0, 1, 2, 3].map((index) => (
             <div key={index} className="h-64 animate-pulse rounded-xl border border-edge bg-surface" />
           ))}
         {signals.map((signal) => (
-          <SignalCard key={signal.instrumentId} signal={signal} quote={quotes[signal.instrumentId]} />
+          <SignalCard
+            key={`${signal.instrumentId}-${signal.horizon}`}
+            signal={signal}
+            quote={quotes[signal.instrumentId]}
+          />
         ))}
       </div>
       {!loading && signals.length === 0 && (

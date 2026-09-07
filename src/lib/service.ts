@@ -1,5 +1,6 @@
 import { INSTRUMENTS, type InstrumentConfig } from '@/lib/config';
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
+import { analyseIntraday } from '@/lib/intraday';
 import { getCandles } from '@/lib/market/candleCache';
 import { getNewsPulse } from '@/lib/news';
 import { getQuotes, type Quote } from '@/lib/quotes';
@@ -25,12 +26,13 @@ export async function analyseInstrument(
   const decimals = quote?.decimals ?? 2;
   const marketStatus = quote?.marketStatus ?? 'CLOSED';
 
-  resolveOpenSignals(instrument.id, candles.entry, now);
+  resolveOpenSignals(instrument.id, 'scalp', candles.entry, now);
 
   const base = {
     instrumentId: instrument.id,
     epic: instrument.epic,
     label: instrument.label,
+    horizon: 'scalp' as const,
     price,
     bid: quote?.bid ?? null,
     ask: quote?.ask ?? null,
@@ -88,12 +90,32 @@ export async function analyseInstrument(
   return signal;
 }
 
-/** The whole board: one quote call prices both markets. */
+/**
+ * The whole board: each market read on both horizons, priced by one quote call.
+ *
+ * Ordered so the two scalping cards come first and the two hour-scale ones
+ * follow, which is how the dashboard lays them out.
+ */
 export async function analyseAllInstruments(): Promise<Signal[]> {
   const quotes = await getQuotes();
   const byId = new Map(quotes.map((quote) => [quote.instrumentId, quote]));
+  const now = Date.now();
 
-  return Promise.all(
-    INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
-  );
+  const [scalps, intraday] = await Promise.all([
+    Promise.all(
+      INSTRUMENTS.map((instrument) => analyseInstrument(instrument, byId.get(instrument.id))),
+    ),
+    Promise.all(
+      INSTRUMENTS.map(async (instrument) => {
+        // The 15-minute frame is already loaded for the minute-scale engine.
+        const candles = (await getCandles(instrument)).direction;
+        resolveOpenSignals(instrument.id, 'intraday', candles, now);
+        const signal = analyseIntraday(instrument, candles, byId.get(instrument.id), now);
+        recordSignal(signal);
+        return signal;
+      }),
+    ),
+  ]);
+
+  return [...scalps, ...intraday];
 }

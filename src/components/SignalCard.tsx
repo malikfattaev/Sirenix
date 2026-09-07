@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { HORIZON_LABEL } from '@/lib/config';
 import type { NewsPulse } from '@/lib/news';
 import type { Quote } from '@/lib/quotes';
 import type { Signal } from '@/lib/strategy/types';
@@ -107,9 +108,14 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
     <section className={`rounded-xl border border-edge bg-surface p-5 ring-1 ${tone.ring}`}>
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold tracking-[0.2em] text-neutral-300">{signal.label}</h2>
+          <h2 className="text-sm font-semibold tracking-[0.2em] text-neutral-300">
+            {signal.label} <span className="text-muted">· {HORIZON_LABEL[signal.horizon]}</span>
+          </h2>
           <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">
-            {[regimeLabel(signal.regime), signal.strategyLabel].filter(Boolean).join(' · ')}
+            {/* The regime read belongs to the minute engine; the hour-scale one has none. */}
+            {[signal.horizon === 'scalp' ? regimeLabel(signal.regime) : null, signal.strategyLabel]
+              .filter(Boolean)
+              .join(' · ') || 'Momentum'}
           </p>
         </div>
         <div className="text-right">

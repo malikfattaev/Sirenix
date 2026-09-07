@@ -1,7 +1,13 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { ALL_INSTRUMENTS, DEDUPE_WINDOW_MS, SIGNAL_LIFETIME_MS } from '@/lib/config';
+import {
+  ALL_INSTRUMENTS,
+  DEDUPE_WINDOW_MS,
+  HORIZON_LABEL,
+  SIGNAL_LIFETIME_MS,
+  type Horizon,
+} from '@/lib/config';
 import type { Candle } from '@/lib/market/candles';
 import type { Signal } from '@/lib/strategy';
 
@@ -11,6 +17,7 @@ export interface SignalRecord {
   id: number;
   instrumentId: string;
   label: string;
+  horizon: Horizon;
   direction: 'LONG' | 'SHORT';
   strategy: string;
   score: number;
@@ -35,6 +42,7 @@ interface Row {
   id: number;
   instrument_id: string;
   label: string;
+  horizon: Horizon;
   direction: 'LONG' | 'SHORT';
   strategy: string;
   score: number;
@@ -71,6 +79,7 @@ function db(): Database.Database {
       strategy       TEXT    NOT NULL,
       score          INTEGER NOT NULL,
       regime         TEXT    NOT NULL,
+      horizon        TEXT    NOT NULL DEFAULT 'scalp',
       entry          REAL    NOT NULL,
       entry_low      REAL    NOT NULL,
       entry_high     REAL    NOT NULL,
@@ -85,8 +94,20 @@ function db(): Database.Database {
       closed_at      INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_signals_recent ON signals (created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_signals_open ON signals (instrument_id, status);
+    CREATE INDEX IF NOT EXISTS idx_signals_open ON signals (instrument_id, horizon, status);
   `);
+
+  // A horizon that no longer exists has nothing left to settle its rows, so
+  // they would sit open forever. Close them as unresolved rather than pretend
+  // they won or lost, and leave the rows themselves in place.
+  const horizons = Object.keys(HORIZON_LABEL);
+  instance
+    .prepare(
+      `UPDATE signals SET status = 'EXPIRED', closed_at = ?
+        WHERE status = 'OPEN' AND horizon NOT IN (${horizons.map(() => '?').join(', ')})`,
+    )
+    .run(Date.now(), ...horizons);
+
   return instance;
 }
 
@@ -98,6 +119,7 @@ const toRecord = (row: Row): SignalRecord => ({
   strategy: row.strategy,
   score: row.score,
   regime: row.regime,
+  horizon: row.horizon,
   entry: row.entry,
   entryLow: row.entry_low,
   entryHigh: row.entry_high,
@@ -123,15 +145,16 @@ export function recordSignal(signal: Signal): SignalRecord | null {
   const existing = db()
     .prepare(
       `SELECT * FROM signals
-        WHERE instrument_id = ? AND direction = ? AND strategy = ? AND status = 'OPEN'
+        WHERE instrument_id = ? AND horizon = ? AND direction = ? AND strategy = ? AND status = 'OPEN'
           AND created_at > ?
         ORDER BY created_at DESC LIMIT 1`,
     )
     .get(
       signal.instrumentId,
+      signal.horizon,
       signal.type,
       signal.strategy,
-      signal.updatedAt - DEDUPE_WINDOW_MS,
+      signal.updatedAt - DEDUPE_WINDOW_MS[signal.horizon],
     ) as Row | undefined;
   if (existing) return toRecord(existing);
 
@@ -139,7 +162,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
   const result = db()
     .prepare(
       `INSERT INTO signals (
-         instrument_id, label, direction, strategy, score, regime,
+         instrument_id, label, direction, strategy, score, regime, horizon,
          entry, entry_low, entry_high, stop_loss, take_profit, take_profit_2,
          risk_reward, decimals, created_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -151,6 +174,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       signal.strategy,
       signal.score,
       signal.regime,
+      signal.horizon,
       plan.entry,
       plan.entryLow,
       plan.entryHigh,
@@ -174,11 +198,19 @@ export function recordSignal(signal: Signal): SignalRecord | null {
  * levels the stop is assumed to have been hit first, which is the pessimistic
  * reading and keeps the history honest.
  *
+ * Scoped to one horizon because each market carries two signals at once, and
+ * each has to be settled on its own candles: a 15-minute bar is too coarse to
+ * judge a scalp, and the minute feed is not what the hour-scale trade lives on.
  */
-export function resolveOpenSignals(instrumentId: string, candles: Candle[], now: number): number {
+export function resolveOpenSignals(
+  instrumentId: string,
+  horizon: Horizon,
+  candles: Candle[],
+  now: number,
+): number {
   const open = db()
-    .prepare(`SELECT * FROM signals WHERE instrument_id = ? AND status = 'OPEN'`)
-    .all(instrumentId) as Row[];
+    .prepare(`SELECT * FROM signals WHERE instrument_id = ? AND horizon = ? AND status = 'OPEN'`)
+    .all(instrumentId, horizon) as Row[];
   if (open.length === 0) return 0;
 
   const update = db().prepare(
@@ -207,7 +239,7 @@ export function resolveOpenSignals(instrumentId: string, candles: Candle[], now:
       }
     }
 
-    const lifetime = SIGNAL_LIFETIME_MS;
+    const lifetime = SIGNAL_LIFETIME_MS[horizon];
     if (!outcome && now - row.created_at > lifetime) {
       const last = since[since.length - 1];
       if (last) outcome = { status: 'EXPIRED', price: last.close, at: now };

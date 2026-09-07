@@ -1,4 +1,4 @@
-import type { Regime, StrategyKey, Timeframe, TimeframeRole } from '@/lib/config';
+import type { Horizon, Regime, StrategyKey, Timeframe, TimeframeRole } from '@/lib/config';
 import type { Level, Pivot } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
 import type { NewsPulse } from '@/lib/news';
@@ -114,10 +114,11 @@ export interface Signal {
   instrumentId: string;
   epic: string;
   label: string;
+  horizon: Horizon;
   type: SignalType;
   /** Confluence strength, 0-100. Not a probability of winning. */
   score: number;
-  strategy: StrategyKey | null;
+  strategy: StrategyKey | 'intraday-momentum' | null;
   strategyLabel: string | null;
   regime: Regime;
   price: number;

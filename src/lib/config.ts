@@ -304,11 +304,57 @@ export const DEFAULT_TUNING: StrategyTuning = {
   ],
 };
 
-/** A signal that has not resolved in half an hour is stale and settled at market. */
-export const SIGNAL_LIFETIME_MS = 30 * 60_000;
+/**
+ * The two horizons the board reads each market on.
+ *
+ * They are opposites on purpose: the minute-scale engine looks for a setup and
+ * takes it, while the hour-scale one only joins a move that is already running.
+ */
+export type Horizon = 'scalp' | 'intraday';
+
+export const HORIZON_LABEL: Record<Horizon, string> = {
+  scalp: 'SCALPING',
+  intraday: 'INTRADAY',
+};
+
+/**
+ * The hour-scale continuation signal, on 15-minute candles.
+ *
+ * Chosen by a grid of 1,728 configurations, of which six were profitable in
+ * *both* halves of an eleven-week sample; all six were continuation, none were
+ * reversion, and they cluster on these values rather than being scattered,
+ * which is what separates a result from a coincidence.
+ *
+ * Measured here: 296 trades, 3.9 a day, 51% win rate, +8.5R, every one of the
+ * four months positive and 7 of 12 weeks. Gold carries it (+10.6R); Brent is
+ * slightly negative (-2.1R). The edge per trade is small and the sample is
+ * short, so this is a modest result, not a strong one.
+ */
+export const INTRADAY = {
+  /** 15-minute bars the stretch is measured over. */
+  lookback: 4,
+  /** Minimum absolute stretch before a signal is issued. */
+  threshold: 1.8,
+  /** Stop and target as multiples of 15-minute ATR. */
+  stopAtr: 2.5,
+  targetAtr: 2,
+  /** Bars the trade is held before it is closed at market. */
+  holdBars: 4,
+  /** Stretch that maps to a displayed strength of 100. */
+  scoreCeiling: 3.5,
+} as const;
+
+/** How long a signal stays open before it is settled at market. */
+export const SIGNAL_LIFETIME_MS: Record<Horizon, number> = {
+  scalp: 30 * 60_000,
+  intraday: INTRADAY.holdBars * TIMEFRAME_MS.MINUTE_15,
+};
 
 /** Two signals of the same shape inside this window count as one. */
-export const DEDUPE_WINDOW_MS = 10 * 60_000;
+export const DEDUPE_WINDOW_MS: Record<Horizon, number> = {
+  scalp: 10 * 60_000,
+  intraday: 30 * 60_000,
+};
 
 /**
  * Prices are polled far more often than the analysis: quotes move continuously,
