@@ -53,6 +53,20 @@ export interface InstrumentConfig {
   epic: string;
   label: string;
   news?: NewsTopic;
+  /**
+   * Horizons this market runs on, and the starting point for the settings
+   * module, which can change it per market at any time.
+   *
+   * Worth knowing while reading these: over 31 days of one-minute candles the
+   * minute engine is negative on Brent at every threshold tried, 23% win and
+   * -23.4R, the worst of any market screened, because its round trip costs 0.70
+   * of a one-minute move. Gold is about break-even there. Both are positive on
+   * both halves at the hour scale. Those numbers sit on the settings page next
+   * to the switch, so the choice is made in front of them rather than behind
+   * them. Research scripts that build instruments on the fly leave this out and
+   * get both.
+   */
+  horizons?: Horizon[];
 }
 
 export const INSTRUMENTS: InstrumentConfig[] = [
@@ -60,6 +74,7 @@ export const INSTRUMENTS: InstrumentConfig[] = [
     id: 'GOLD',
     epic: 'GOLD',
     label: 'GOLD',
+    horizons: ['scalp', 'intraday'],
     news: {
       feeds: ['investing-commodities', 'investing-commodity-news', 'fxstreet', 'marketwatch'],
       match: ['gold', 'bullion', 'xau', 'precious metal', 'safe haven', 'safe-haven'],
@@ -69,51 +84,10 @@ export const INSTRUMENTS: InstrumentConfig[] = [
     id: 'BRENT',
     epic: 'OIL_BRENT',
     label: 'BRENT OIL',
+    horizons: ['scalp', 'intraday'],
     news: {
       feeds: ['oilprice', 'investing-commodities', 'investing-commodity-news', 'cnbc-energy', 'fxstreet'],
       match: ['oil', 'brent', 'crude', 'wti', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
-    },
-  },
-  {
-    id: 'WTI',
-    epic: 'OIL_CRUDE',
-    label: 'WTI CRUDE',
-    news: {
-      feeds: ['oilprice', 'investing-commodities', 'investing-commodity-news', 'cnbc-energy', 'fxstreet'],
-      match: ['oil', 'wti', 'crude', 'brent', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
-    },
-  },
-  {
-    id: 'US30',
-    epic: 'US30',
-    label: 'US 30',
-    news: {
-      feeds: ['investing-stocks', 'investing-economy', 'cnbc-markets', 'marketwatch'],
-      match: [
-        'dow', 'dow jones', 'wall street', 'stocks', 'stock market', 'equities',
-        's&p', 'blue chip', 'fed', 'payrolls', 'inflation', 'rate cut', 'rate hike',
-      ],
-    },
-  },
-  {
-    id: 'US100',
-    epic: 'US100',
-    label: 'US TECH 100',
-    news: {
-      feeds: ['investing-stocks', 'investing-economy', 'cnbc-markets', 'marketwatch'],
-      match: [
-        'nasdaq', 'tech stock', 'tech stocks', 'wall street', 'stocks', 'equities',
-        'semiconductor', 'chipmaker', 'megacap', 'fed', 'rate cut', 'rate hike',
-      ],
-    },
-  },
-  {
-    id: 'USDJPY',
-    epic: 'USDJPY',
-    label: 'USD/JPY',
-    news: {
-      feeds: ['fxstreet', 'investing-economy', 'marketwatch'],
-      match: ['yen', 'usd/jpy', 'usdjpy', 'dollar', 'bank of japan', 'boj'],
     },
   },
 ];
@@ -134,9 +108,6 @@ export const NEWS_FEEDS: NewsFeedConfig[] = [
   { id: 'oilprice', label: 'OilPrice', url: 'https://oilprice.com/rss/main' },
   { id: 'fxstreet', label: 'FXStreet', url: 'https://www.fxstreet.com/rss/news' },
   { id: 'cnbc-energy', label: 'CNBC Energy', url: 'https://www.cnbc.com/id/10000664/device/rss/rss.html' },
-  { id: 'cnbc-markets', label: 'CNBC Markets', url: 'https://www.cnbc.com/id/20910258/device/rss/rss.html' },
-  { id: 'investing-stocks', label: 'Investing.com', url: 'https://www.investing.com/rss/news_25.rss' },
-  { id: 'investing-economy', label: 'Investing.com', url: 'https://www.investing.com/rss/news_1.rss' },
   { id: 'marketwatch', label: 'MarketWatch', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories' },
 ];
 
@@ -354,7 +325,11 @@ export const DEFAULT_TUNING: StrategyTuning = {
    * nothing there. It is live-only by nature.
    */
   enabledStrategies: [
-    'breakout-retest',
+    // 'breakout-retest' is off: over 20 days and 100 signals across the six
+    // markets it won 31% and lost 27.2R, negative in both halves of the sample
+    // and on every market. It is the largest sample of any strategy here and
+    // the only one that loses consistently, so it stays off until it can be
+    // shown to work on data it was not measured on.
     'momentum',
     'news-drive',
     'pullback-fade',
@@ -370,6 +345,9 @@ export const DEFAULT_TUNING: StrategyTuning = {
  * takes it, while the hour-scale one only joins a move that is already running.
  */
 export type Horizon = 'scalp' | 'intraday';
+
+/** Both horizons, in the order the board lays them out. */
+export const HORIZONS: Horizon[] = ['scalp', 'intraday'];
 
 export const HORIZON_LABEL: Record<Horizon, string> = {
   scalp: 'СКАЛЬПИНГ',
@@ -420,17 +398,45 @@ export const INTRADAY = {
   scoreCeiling: 3.5,
 } as const;
 
+/**
+ * A market carries one direction at a time.
+ *
+ * While a signal is open the board keeps showing that signal, and no new one is
+ * issued on the same market and horizon. The plan already published has a stop,
+ * and the stop is the exit. Turning around before it is reached realises the
+ * loss and then pays the spread again to enter at a worse price, which is
+ * exactly how a market drifting around one level takes money from a system that
+ * re-ranks every setup from scratch every second.
+ *
+ * After a losing close the market is left alone for a while instead of being
+ * re-entered straight away, for the same reason: the read has just been shown
+ * to be wrong, and the next few minutes are the worst time to repeat it.
+ */
+export const POSITION: { lossCooldownMs: Record<Horizon, number> } = {
+  lossCooldownMs: {
+    scalp: 15 * 60_000,
+    intraday: 60 * 60_000,
+  },
+};
+
 /** How long a signal stays open before it is settled at market. */
 export const SIGNAL_LIFETIME_MS: Record<Horizon, number> = {
   scalp: 30 * 60_000,
   intraday: INTRADAY.holdBars * TIMEFRAME_MS.MINUTE_15,
 };
 
-/** Two signals of the same shape inside this window count as one. */
-export const DEDUPE_WINDOW_MS: Record<Horizon, number> = {
-  scalp: 10 * 60_000,
-  intraday: 30 * 60_000,
-};
+/**
+ * The signal history on the dashboard.
+ *
+ * `visibleRows` is how much of it stands on the page before the list starts
+ * scrolling: enough to see what just happened without the table pushing the
+ * rest of the dashboard off the screen. `limit` is how deep the list goes,
+ * which is also how much the filters have to work with.
+ */
+export const HISTORY = {
+  visibleRows: 5,
+  limit: 50,
+} as const;
 
 /**
  * Prices are polled far more often than the analysis: quotes move continuously,
@@ -439,5 +445,86 @@ export const DEDUPE_WINDOW_MS: Record<Horizon, number> = {
 export const PRICE_REFRESH_INTERVAL_MS = 1_000;
 export const SIGNAL_REFRESH_INTERVAL_MS = 1_000;
 
+/**
+ * The record only changes when a signal is issued or settled, and the wires
+ * are read on their own cache upstream, so neither is worth a poll a second.
+ */
+export const STATS_REFRESH_INTERVAL_MS = 5_000;
+export const NEWS_REFRESH_INTERVAL_MS = 30_000;
+
 /** Server-side quote cache, so extra browser tabs do not multiply upstream calls. */
 export const QUOTE_CACHE_MS = 700;
+
+/**
+ * How long a price may go unchanged before it stops counting as live.
+ *
+ * Measured on this account, the REST snapshot can sit minutes behind on a
+ * market that still reports TRADEABLE, with nothing in the response to say so.
+ * A signal priced off a number that old is not a signal, so past this the board
+ * says the price is stale and issues nothing on that market.
+ */
+export const QUOTE_STALE_MS = 90_000;
+
+/**
+ * The parts of the configuration a person is expected to change while the
+ * system is running.
+ *
+ * Everything else in `config.ts` is a measured value: changing it invalidates
+ * the backtests it was chosen from, so it belongs in the file and in git rather
+ * than behind a form. What is here is the shape of the board, how selective the
+ * engine is, and how long it waits after being wrong.
+ */
+export interface Settings {
+  /** Markets analysed on the board, as instrument ids. */
+  markets: string[];
+  /** Minimum confluence score, 0-100, required to publish a scalping signal. */
+  minScore: number;
+  /** Minutes a market is left alone after a losing trade, per horizon. */
+  lossCooldownMinutes: Record<Horizon, number>;
+  /** How many history rows stand on the page before the list scrolls. */
+  historyVisibleRows: number;
+  /** Which horizons run on each market, keyed by instrument id. */
+  horizons: Record<string, Horizon[]>;
+}
+
+export const SETTINGS_LIMITS = {
+  minScore: { min: 30, max: 95 },
+  lossCooldownMinutes: { min: 0, max: 240 },
+  historyVisibleRows: { min: 3, max: 20 },
+} as const;
+
+export const DEFAULT_SETTINGS: Settings = {
+  markets: INSTRUMENTS.map((instrument) => instrument.id),
+  minScore: DEFAULT_TUNING.minScore,
+  lossCooldownMinutes: {
+    scalp: POSITION.lossCooldownMs.scalp / 60_000,
+    intraday: POSITION.lossCooldownMs.intraday / 60_000,
+  },
+  historyVisibleRows: HISTORY.visibleRows,
+  horizons: Object.fromEntries(
+    INSTRUMENTS.map((instrument) => [instrument.id, instrument.horizons ?? HORIZONS]),
+  ),
+};
+
+/** Who a person is on this install. */
+export type Role = 'admin' | 'user';
+
+export const ROLE_LABEL: Record<Role, string> = {
+  admin: 'Администратор',
+  user: 'Пользователь',
+};
+
+/**
+ * Accounts and sessions.
+ *
+ * A session is a random token kept in a cookie the browser cannot read from
+ * script; only its hash is stored, so a copy of the database does not hand
+ * anyone a way in.
+ */
+export const AUTH = {
+  sessionDays: 30,
+  minLoginLength: 3,
+  maxLoginLength: 32,
+  minPasswordLength: 8,
+  cookieName: 'sirenix_session',
+} as const;
