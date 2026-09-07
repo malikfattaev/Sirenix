@@ -5,6 +5,7 @@ import {
   type CapitalMarketDetails,
   type CapitalPrice,
   type CapitalMarketsResponse,
+  type CapitalMarketSummary,
   type CapitalPricesResponse,
 } from './types';
 
@@ -184,6 +185,15 @@ class CapitalClient {
   /** Live snapshot: bid/ask, market status and quoting precision. */
   getMarket(epic: string): Promise<CapitalMarketDetails> {
     return this.request<CapitalMarketDetails>(`/api/v1/markets/${encodeURIComponent(epic)}`);
+  }
+
+  /** Free-text instrument search, used to build the research universe. */
+  async searchMarkets(term: string): Promise<CapitalMarketSummary[]> {
+    const params = new URLSearchParams({ searchTerm: term });
+    const body = await this.request<{ markets?: CapitalMarketSummary[] }>(
+      `/api/v1/markets?${params}`,
+    );
+    return body.markets ?? [];
   }
 
   /** Snapshots for several instruments in one request — the cheap price poll. */

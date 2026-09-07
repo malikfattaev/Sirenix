@@ -41,6 +41,16 @@ export interface CapitalMarketDetails {
   snapshot: CapitalSnapshot;
 }
 
+/** Flat shape returned by the market search endpoint. */
+export interface CapitalMarketSummary {
+  epic: string;
+  instrumentName: string;
+  instrumentType: string;
+  marketStatus: string;
+  bid: number | null;
+  offer: number | null;
+}
+
 export interface CapitalMarketsResponse {
   marketDetails: CapitalMarketDetails[];
 }
