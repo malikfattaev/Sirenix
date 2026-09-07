@@ -2,6 +2,7 @@ import { INTRADAY, type InstrumentConfig } from '@/lib/config';
 import { atr as atrSeries, ema, lastValue, rsi as rsiSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
 import type { Quote } from '@/lib/quotes';
+import { STANDING_ASIDE } from '@/lib/strategy';
 import type { Signal } from '@/lib/strategy/types';
 
 /**
@@ -77,18 +78,18 @@ export function analyseIntraday(
     updatedAt: now,
   };
 
-  const wait = (blockedBy: string, reasons: string[] = []): Signal => ({
+  const wait = (cause: string, reasons: string[] = []): Signal => ({
     ...base,
     type: 'WAIT',
     score: 0,
     plan: null,
     reasons,
-    blockedBy,
+    blockedBy: `${STANDING_ASIDE} ${cause}`,
   });
 
-  if (!read) return wait('Not enough 15m history yet');
+  if (!read) return wait('not enough 15m history yet');
   if (base.marketStatus !== 'TRADEABLE') {
-    return wait(`Market is ${base.marketStatus.toLowerCase().replace(/_/g, ' ')}`);
+    return wait(`market is ${base.marketStatus.toLowerCase().replace(/_/g, ' ')}`);
   }
 
   const strength = Math.abs(read.stretch);
@@ -98,8 +99,8 @@ export function analyseIntraday(
     `15m RSI ${read.rsi.toFixed(0)}`,
   ];
 
-  if (strength < INTRADAY.threshold) return wait('Move is not strong enough to join', context);
-  if (!read.confirmed) return wait('The last 15m candle closed against the move', context);
+  if (strength < INTRADAY.threshold) return wait('the move is not strong enough to join', context);
+  if (!read.confirmed) return wait('the last 15m candle closed against the move', context);
 
   const isLong = read.stretch > 0;
   const side = isLong ? 1 : -1;

@@ -15,6 +15,12 @@ export { buildContext } from './context';
 export { buildViews } from './views';
 export { STRATEGIES, STRATEGY_LABELS } from './strategies';
 
+/** Prefix shared by every reason the board gives for not trading. */
+export const STANDING_ASIDE = 'Standing aside:';
+
+/** Lower-cases only the first letter, so wording after the prefix reads as one sentence. */
+const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
 export interface Decision {
   type: SignalType;
   score: number;
@@ -47,22 +53,24 @@ export function decide(
   context: MarketContext,
   tuning: StrategyTuning = DEFAULT_TUNING,
 ): Decision {
-  const empty = (blockedBy: string, reasons: string[] = []): Decision => ({
+  // Every reason for standing aside reads the same way, so the card always
+  // answers the same question: not "what state is this", but "why not yet".
+  const empty = (cause: string, reasons: string[] = []): Decision => ({
     type: 'WAIT',
     score: 0,
     strategy: null,
     strategyLabel: null,
     plan: null,
     reasons,
-    blockedBy,
+    blockedBy: `${STANDING_ASIDE} ${cause}`,
     components: [],
   });
 
   if (context.marketStatus !== 'TRADEABLE') {
-    return empty(`Market is ${context.marketStatus.toLowerCase().replace(/_/g, ' ')}`);
+    return empty(`market is ${context.marketStatus.toLowerCase().replace(/_/g, ' ')}`);
   }
   if (context.regime === 'CHOP') {
-    return empty('Choppy market, standing aside', [context.regimeReason]);
+    return empty('the market is choppy', [context.regimeReason]);
   }
 
   const eligible = STRATEGIES.filter(
@@ -70,7 +78,8 @@ export function decide(
       strategy.regimes.includes(context.regime) &&
       (tuning.enabledStrategies === null || tuning.enabledStrategies.includes(strategy.key)),
   );
-  const rejections: string[] = [];
+  /** Why each strategy that looked at the market decided against a trade. */
+  const rejections: { label: string; cause: string }[] = [];
   const evaluated: Evaluated[] = [];
 
   for (const strategy of eligible) {
@@ -80,7 +89,7 @@ export function decide(
     // Refuse to chase: once price has run past the trigger the entry is gone.
     const chased = Math.abs(context.price - candidate.triggerPrice) / context.views.entry.atr;
     if (chased > tuning.maxChaseAtr) {
-      rejections.push(`${strategy.label}: move already happened (${chased.toFixed(1)} ATR past entry)`);
+      rejections.push({ label: strategy.label, cause: `the move already happened, ${chased.toFixed(1)} ATR past the entry` });
       continue;
     }
     // A 1H move straight against us vetoes a continuation setup. A fade is
@@ -88,28 +97,30 @@ export function decide(
     const hourly = context.views.context;
     const against = sign(candidate.direction) * (hourly.close - hourly.ema20);
     if (strategy.bias === 'continuation' && against < -1.5 * hourly.atr) {
-      rejections.push(`${strategy.label}: 1H is moving hard the other way`);
+      rejections.push({ label: strategy.label, cause: 'the hourly chart is moving hard the other way' });
       continue;
     }
 
     const plan = buildPlan(context, candidate, tuning);
     if (!plan.ok) {
-      rejections.push(`${strategy.label}: ${plan.detail}`);
+      rejections.push({ label: strategy.label, cause: plan.detail });
       continue;
     }
 
     const { score, components } = scoreSetup(context, candidate, strategy.bias, plan.plan, tuning);
     if (score < tuning.minScore) {
-      rejections.push(`${strategy.label}: confluence ${score}/100`);
+      rejections.push({ label: strategy.label, cause: `confluence only ${score} of ${tuning.minScore} needed` });
       continue;
     }
     evaluated.push({ candidate, label: strategy.label, plan: plan.plan, score, components });
   }
 
   if (evaluated.length === 0) {
-    return empty('No setup meets the requirements right now', [
+    // The nearest miss is far more useful than "nothing fired".
+    const nearest = rejections[0];
+    return empty(nearest ? lower(nearest.cause) : 'no setup has formed yet', [
       context.regimeReason,
-      ...rejections.slice(0, 3),
+      ...rejections.slice(0, 3).map((rejection) => `${rejection.label}: ${rejection.cause}`),
     ]);
   }
 
