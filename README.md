@@ -154,7 +154,12 @@ the spread again to enter the opposite one. So a market carries one signal per h
   target. No other setup on that market is issued, in either direction.
 * it ends only where it was always going to end: its stop, its target, or its holding time.
 * after a losing close the market is left alone for `POSITION.lossCooldownMs` before it is offered
-  again, so a stop-out is not immediately followed by a reverse entry into the same chop.
+  again, so a stop-out is not immediately followed by a reverse entry into the same chop;
+* after `POSITION.maxLossStreak` losses in a row it comes off the board entirely, for four hours on
+  the minute scale and twelve on the hour scale. A run of six at a 50% win rate turns up about once
+  in sixty-four attempts and cannot be designed away, but it does not have to be sat through: three
+  in a row is either the market having changed character or the read being wrong about it, and
+  neither is fixed by taking the fourth trade. Both numbers are on the settings page.
 
 ## Backtest
 

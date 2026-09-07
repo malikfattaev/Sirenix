@@ -1,10 +1,16 @@
-import { STRATEGY_NAME, type StrategyKey } from '@/lib/config';
-import { lastLoss, openSignal, type SignalRecord } from '@/lib/db';
-import { lossCooldownMs } from '@/lib/settings';
+import { POSITION, STRATEGY_NAME, type StrategyKey } from '@/lib/config';
+import { lastLoss, lossStreak, openSignal, type SignalRecord } from '@/lib/db';
+import { lossCooldownMs, maxLossStreak } from '@/lib/settings';
 import { STANDING_ASIDE } from '@/lib/strategy';
 import type { Signal } from '@/lib/strategy/types';
 
 const minutes = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
+
+/** A pause measured in hours reads better than one measured in 240 minutes. */
+const hours = (ms: number) => {
+  const total = Math.max(1, Math.ceil(ms / 60_000));
+  return total < 90 ? `${total} мин` : `${Math.round(total / 60)} ч`;
+};
 
 /**
  * Holds the board to the trade it has already published.
@@ -26,10 +32,32 @@ export function withPosition(signal: Signal): Signal {
 
   if (signal.type === 'WAIT') return signal;
 
+  // A run of losses is either the market having changed character or the read
+  // being wrong about it. Neither is fixed by taking the next trade straight
+  // away, so the market comes off the board until it has had time to change.
+  const streak = lossStreak(signal.instrumentId, signal.horizon);
+  const streakUntil = streak.lastAt + POSITION.streakPauseMs[signal.horizon];
+  if (streak.count >= maxLossStreak() && signal.updatedAt < streakUntil) {
+    return standAside(
+      signal,
+      `${streak.count} убытка подряд, рынок на паузе ещё ${hours(streakUntil - signal.updatedAt)}`,
+      `Cut off after ${streak.count} losses in a row rather than sitting through the run`,
+    );
+  }
+
   const loss = lastLoss(signal.instrumentId, signal.horizon);
   const until = (loss?.closedAt ?? 0) + lossCooldownMs(signal.horizon);
   if (!loss?.closedAt || signal.updatedAt >= until) return signal;
 
+  return standAside(
+    signal,
+    `пауза после убытка, ещё ${minutes(until - signal.updatedAt)} мин`,
+    'Standing off after a losing trade rather than re-entering into the same move',
+  );
+}
+
+/** Turns a signal into a refusal that says why. */
+function standAside(signal: Signal, cause: string, reason: string): Signal {
   return {
     ...signal,
     type: 'WAIT',
@@ -37,8 +65,8 @@ export function withPosition(signal: Signal): Signal {
     strategy: null,
     strategyLabel: null,
     plan: null,
-    reasons: ['Standing off after a losing trade rather than re-entering into the same move'],
-    blockedBy: `${STANDING_ASIDE} пауза после убытка, ещё ${minutes(until - signal.updatedAt)} мин`,
+    reasons: [reason],
+    blockedBy: `${STANDING_ASIDE} ${cause}`,
   };
 }
 

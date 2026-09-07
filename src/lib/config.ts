@@ -412,10 +412,29 @@ export const INTRADAY = {
  * re-entered straight away, for the same reason: the read has just been shown
  * to be wrong, and the next few minutes are the worst time to repeat it.
  */
-export const POSITION: { lossCooldownMs: Record<Horizon, number> } = {
+export const POSITION: {
+  lossCooldownMs: Record<Horizon, number>;
+  maxLossStreak: number;
+  streakPauseMs: Record<Horizon, number>;
+} = {
   lossCooldownMs: {
     scalp: 15 * 60_000,
     intraday: 60 * 60_000,
+  },
+  /**
+   * Losses in a row that take a market off the board for a while.
+   *
+   * A run of six at a 50% win rate turns up about once in sixty-four attempts:
+   * it cannot be designed away, and anyone promising otherwise is selling
+   * something. What it can be is cut short. Three losses in a row is either the
+   * market having changed character or the read being wrong about it, and
+   * neither is fixed by taking the fourth trade straight away.
+   */
+  maxLossStreak: 3,
+  /** How long the market is left alone once the streak is hit. */
+  streakPauseMs: {
+    scalp: 4 * 60 * 60_000,
+    intraday: 12 * 60 * 60_000,
   },
 };
 
@@ -485,12 +504,15 @@ export interface Settings {
   historyVisibleRows: number;
   /** Which horizons run on each market, keyed by instrument id. */
   horizons: Record<string, Horizon[]>;
+  /** Losses in a row that pause a market. */
+  maxLossStreak: number;
 }
 
 export const SETTINGS_LIMITS = {
   minScore: { min: 30, max: 95 },
   lossCooldownMinutes: { min: 0, max: 240 },
   historyVisibleRows: { min: 3, max: 20 },
+  maxLossStreak: { min: 2, max: 10 },
 } as const;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -504,6 +526,7 @@ export const DEFAULT_SETTINGS: Settings = {
   horizons: Object.fromEntries(
     INSTRUMENTS.map((instrument) => [instrument.id, instrument.horizons ?? HORIZONS]),
   ),
+  maxLossStreak: POSITION.maxLossStreak,
 };
 
 /** Who a person is on this install. */

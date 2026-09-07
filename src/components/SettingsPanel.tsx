@@ -210,6 +210,19 @@ export function SettingsPanel() {
           ))}
 
           <Field
+            label="Стоп после серии убытков"
+            hint="Сколько убытков подряд снимают рынок с доски. Серия сама по себе неизбежна, но досиживать её не обязательно: после этого числа рынок отдыхает четыре часа на скальпинге и двенадцать на дне."
+          >
+            <Number_
+              value={draft.maxLossStreak}
+              min={SETTINGS_LIMITS.maxLossStreak.min}
+              max={SETTINGS_LIMITS.maxLossStreak.max}
+              suffix={`подряд, по умолчанию ${DEFAULT_SETTINGS.maxLossStreak}`}
+              onChange={(maxLossStreak) => patch({ maxLossStreak })}
+            />
+          </Field>
+
+          <Field
             label="Записей истории на экране"
             hint="Сколько строк стоит в списке до того, как он начнёт прокручиваться."
           >

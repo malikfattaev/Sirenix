@@ -55,6 +55,11 @@ function normalise(stored: Partial<Settings> | null): Settings {
       SETTINGS_LIMITS.historyVisibleRows,
       DEFAULT_SETTINGS.historyVisibleRows,
     ),
+    maxLossStreak: clamp(
+      stored?.maxLossStreak ?? DEFAULT_SETTINGS.maxLossStreak,
+      SETTINGS_LIMITS.maxLossStreak,
+      DEFAULT_SETTINGS.maxLossStreak,
+    ),
     // A market with no horizon left on would sit on the board doing nothing,
     // so an empty choice falls back to what the config measured for it.
     horizons: Object.fromEntries(
@@ -106,6 +111,11 @@ export function activeTuning(): StrategyTuning {
 /** The horizons to run on one market, after settings. */
 export function horizonsFor(instrumentId: string): Horizon[] {
   return getSettings().horizons[instrumentId] ?? HORIZONS;
+}
+
+/** Losses in a row that take a market off the board. */
+export function maxLossStreak(): number {
+  return getSettings().maxLossStreak;
 }
 
 /** Milliseconds a market is left alone after a losing trade. */

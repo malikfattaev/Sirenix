@@ -413,6 +413,35 @@ export function openSignal(instrumentId: string, horizon: Horizon): SignalRecord
   return row ? toRecord(row) : null;
 }
 
+/**
+ * How many settled signals in a row lost on this market, and when the last one
+ * closed.
+ *
+ * Read backwards from the newest, stopping at the first one that did not lose,
+ * so it measures the run that is actually happening rather than a rate over
+ * some window.
+ */
+export function lossStreak(
+  instrumentId: string,
+  horizon: Horizon,
+): { count: number; lastAt: number } {
+  const rows = db()
+    .prepare(
+      `SELECT result_r, closed_at FROM signals
+        WHERE instrument_id = ? AND horizon = ? AND result_r IS NOT NULL
+        ORDER BY closed_at DESC LIMIT 25`,
+    )
+    .all(instrumentId, horizon) as { result_r: number; closed_at: number | null }[];
+
+  let count = 0;
+  for (const row of rows) {
+    if (row.result_r >= 0) break;
+    count += 1;
+  }
+
+  return { count, lastAt: rows[0]?.closed_at ?? 0 };
+}
+
 /** The last signal that ended badly on a market, used to hold off a re-entry. */
 export function lastLoss(instrumentId: string, horizon: Horizon): SignalRecord | null {
   const row = db()
