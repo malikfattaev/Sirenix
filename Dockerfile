@@ -41,10 +41,12 @@ ENV NODE_ENV=production \
     DATABASE_PATH=/data/signals.db \
     SETTINGS_PATH=/data/settings.json
 
-# Signal history, accounts and settings survive a redeploy only on a mounted
-# volume; without one this is an ordinary directory and the container is
+# Signal history, accounts and settings survive a redeploy only when a volume is
+# mounted here; without one this is an ordinary directory and the container is
 # stateless, which is a valid way to run it but loses the history on restart.
-VOLUME /data
+# Declared with mkdir rather than VOLUME: platforms that manage their own
+# volumes, Railway among them, refuse an image that claims one for itself.
+RUN mkdir -p /data
 
 COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
