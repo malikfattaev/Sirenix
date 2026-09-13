@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { User } from '@/lib/auth';
-import { ROLE_LABEL } from '@/lib/config';
 import { useMarketData } from './MarketData';
 
 /** 16px stroke icons, drawn inline so the shell pulls in no icon package. */
@@ -50,7 +49,7 @@ const SECTIONS: {
 }[] = [
   {
     title: 'Итог',
-    modules: [{ href: '/', icon: 'dashboard', label: 'Дешборд' }],
+    modules: [{ href: '/', icon: 'dashboard', label: 'Панель управления' }],
   },
   {
     title: 'Рынок',
@@ -137,7 +136,10 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     <div className="flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-edge bg-surface md:flex">
         <div className="py-7">
-          <Link href="/" className="block text-center text-2xl font-semibold tracking-[0.28em]">
+          <Link
+            href="/"
+            className="block bg-gradient-to-r from-neutral-50 via-[#8fa3c7] to-neutral-500 bg-clip-text text-center text-2xl font-semibold tracking-[0.28em] text-transparent"
+          >
             SIRENIX
           </Link>
           <div className="mx-auto mt-5 h-px w-16 bg-edge" />
@@ -156,20 +158,6 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
           ))}
         </nav>
 
-        <div className="border-t border-edge px-5 py-4">
-          <div className="truncate text-[12px] text-neutral-300">{user.login}</div>
-          <div className="mt-0.5 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-muted">{ROLE_LABEL[user.role]}</span>
-            <button
-              type="button"
-              onClick={signOut}
-              disabled={leaving}
-              className="text-[11px] text-muted transition hover:text-neutral-300 disabled:opacity-50"
-            >
-              {leaving ? 'выхожу…' : 'выйти'}
-            </button>
-          </div>
-        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

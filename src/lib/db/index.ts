@@ -4,6 +4,7 @@ import {
   HORIZON_LABEL,
   SIGNAL_LIFETIME_MS,
   type Horizon,
+  type Settings,
 } from '@/lib/config';
 import type { Candle } from '@/lib/market/candles';
 import { connection } from '@/lib/db/connection';
@@ -115,7 +116,29 @@ function db(): Database.Database {
 }
 
 /** The horizons the app still runs, and so can still judge a signal on. */
-const LIVE_HORIZONS = Object.keys(HORIZON_LABEL);
+const LIVE_HORIZONS = Object.keys(HORIZON_LABEL) as Horizon[];
+
+type SignalScope = Pick<Settings, 'markets' | 'horizons'>;
+
+function trackedSignalPairs(scope?: SignalScope): [string, Horizon][] {
+  const known = new Set(ALL_INSTRUMENTS.map((instrument) => instrument.id));
+  const markets = scope
+    ? scope.markets.filter((instrumentId) => known.has(instrumentId))
+    : ALL_INSTRUMENTS.map((instrument) => instrument.id);
+
+  return markets.flatMap((instrumentId) =>
+    (scope?.horizons[instrumentId] ?? LIVE_HORIZONS)
+      .filter((horizon) => LIVE_HORIZONS.includes(horizon))
+      .map((horizon) => [instrumentId, horizon] as [string, Horizon]),
+  );
+}
+
+function pairWhere(pairs: [string, Horizon][]) {
+  return {
+    clause: pairs.map(() => '(instrument_id = ? AND horizon = ?)').join(' OR '),
+    args: pairs.flatMap(([instrumentId, horizon]) => [instrumentId, horizon]),
+  };
+}
 
 function migrate(connection: Database.Database) {
   const columns = connection.prepare('PRAGMA table_info(signals)').all() as { name: string }[];
@@ -339,8 +362,8 @@ export interface SignalStats {
  * above water, whether it got there by reaching its target or by running out of
  * time in front, which is what the money actually did.
  */
-export function signalStats(): SignalStats {
-  const rows = recentSignals(ALL_ROWS);
+export function signalStats(scope?: SignalScope): SignalStats {
+  const rows = recentSignals(ALL_ROWS, scope);
 
   return {
     total: rows.length,
@@ -367,20 +390,27 @@ export function clearHistory(): { removed: number; kept: number } {
 }
 
 /**
- * Closes open signals on markets that have just left the board.
+ * Closes open signals on market/horizon pairs that have just left the board.
  *
  * Nothing fetches their candles any more, so there is no price to judge them
  * against: they are marked unevaluated rather than left standing as forecasts
  * nobody is going to settle.
  */
-export function cancelUntracked(active: string[]): number {
-  if (active.length === 0) return 0;
+export function cancelUntracked(scope: SignalScope): number {
+  const pairs = trackedSignalPairs(scope);
+  if (pairs.length === 0) {
+    return db()
+      .prepare("UPDATE signals SET status = 'CANCELLED', closed_at = ? WHERE status = 'OPEN'")
+      .run(Date.now()).changes;
+  }
+
+  const { clause, args } = pairWhere(pairs);
   return db()
     .prepare(
       `UPDATE signals SET status = 'CANCELLED', closed_at = ?
-        WHERE status = 'OPEN' AND instrument_id NOT IN (${active.map(() => '?').join(', ')})`,
+        WHERE status = 'OPEN' AND NOT (${clause})`,
     )
-    .run(Date.now(), ...active).changes;
+    .run(Date.now(), ...args).changes;
 }
 
 /**
@@ -464,15 +494,17 @@ export function lastLoss(instrumentId: string, horizon: Horizon): SignalRecord |
  * than shown as an open forecast nobody is going to judge. Every row stays in
  * the database either way.
  */
-export function recentSignals(limit = 25): SignalRecord[] {
-  const tracked = ALL_INSTRUMENTS.map((instrument) => instrument.id);
+export function recentSignals(limit = 25, scope?: SignalScope): SignalRecord[] {
+  const pairs = trackedSignalPairs(scope);
+  if (pairs.length === 0) return [];
+
+  const { clause, args } = pairWhere(pairs);
   const rows = db()
     .prepare(
       `SELECT * FROM signals
-        WHERE instrument_id IN (${tracked.map(() => '?').join(', ')})
-          AND horizon IN (${LIVE_HORIZONS.map(() => '?').join(', ')})
+        WHERE ${clause}
         ORDER BY created_at DESC LIMIT ?`,
     )
-    .all(...tracked, ...LIVE_HORIZONS, limit) as Row[];
+    .all(...args, limit) as Row[];
   return rows.map(toRecord);
 }

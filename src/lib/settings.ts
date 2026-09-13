@@ -80,7 +80,7 @@ function normalise(stored: Partial<Settings> | null): Settings {
 export function getSettings(): Settings {
   if (cache) return cache;
   try {
-    cache = normalise(JSON.parse(readFileSync(FILE, 'utf8')) as Partial<Settings>);
+    cache = normalise(JSON.parse(readFileSync(/* turbopackIgnore: true */ FILE, 'utf8')) as Partial<Settings>);
   } catch {
     // No file yet, or an unreadable one: the defaults are a valid answer.
     cache = normalise(null);
@@ -92,7 +92,7 @@ export function getSettings(): Settings {
 export function saveSettings(patch: Partial<Settings>): Settings {
   const next = normalise({ ...getSettings(), ...patch });
   mkdirSync(path.dirname(FILE), { recursive: true });
-  writeFileSync(FILE, `${JSON.stringify(next, null, 2)}\n`);
+  writeFileSync(/* turbopackIgnore: true */ FILE, `${JSON.stringify(next, null, 2)}\n`);
   cache = next;
   return next;
 }

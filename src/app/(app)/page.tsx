@@ -10,7 +10,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <ModuleHeader title="ДЕШБОРД" hint="Сколько сигналов было и чем они закончились." />
+      <ModuleHeader title="ПАНЕЛЬ УПРАВЛЕНИЯ" hint="Сколько сигналов было и чем они закончились." />
       <StatsPanel stats={stats} />
 
       <section className="mt-10">

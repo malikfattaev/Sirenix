@@ -27,16 +27,16 @@ export async function GET() {
 /**
  * Saves settings and squares the history with them.
  *
- * Taking a market off the board leaves its running signals with nobody to judge
- * them, since nothing fetches its candles any more. They are closed as
- * unevaluated rather than left sitting as open forecasts.
+ * Taking a market or horizon off the board leaves its running signals with
+ * nobody to judge them, since nothing fetches those candles any more. They are
+ * closed as unevaluated rather than left sitting as open forecasts.
  */
 export async function PUT(request: Request) {
   try {
     await requireUser();
     const patch = (await request.json()) as Partial<Settings>;
     const settings = saveSettings(patch);
-    cancelUntracked(settings.markets);
+    cancelUntracked(settings);
     return NextResponse.json(body(settings));
   } catch (error) {
     return errorResponse(error);

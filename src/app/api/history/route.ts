@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/auth/session';
 import { errorResponse } from '@/lib/http';
 import { HISTORY } from '@/lib/config';
 import { clearHistory, recentSignals } from '@/lib/db';
+import { getSettings } from '@/lib/settings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
 
   try {
     await requireUser();
-    return NextResponse.json({ signals: recentSignals(limit) });
+    return NextResponse.json({ signals: recentSignals(limit, getSettings()) });
   } catch (error) {
     return errorResponse(error);
   }
