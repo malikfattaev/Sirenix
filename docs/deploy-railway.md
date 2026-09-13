@@ -24,7 +24,9 @@ railway link
 ```
 
 Then connect the GitHub repository in the service's **Settings → Source**, so a
-push to `master` deploys. Alternatively, deploy the working tree directly:
+push to `master` deploys. That link needs Railway's GitHub app to have access to
+the repository; without it `railway add --repo` answers `Unauthorized` and the
+working tree is deployed directly instead:
 
 ```bash
 railway up
@@ -75,8 +77,19 @@ the user table is still empty. They are read on every request and ignored from
 the second account onwards, so a restart never resets anyone's password and
 leaving them set is harmless. Everyone else is added from the **Доступ** page.
 
-`PORT` is supplied by Railway and read by the server; it does not need to be
-set. Do not set `DATABASE_PATH` or `SETTINGS_PATH` unless the volume is mounted
+`PORT` must be left alone. Railway injects one of its own — `8080` — and points
+the generated domain at the same number; the server reads it and listens there,
+and the `3000` in the image is only the default for running it outside Railway.
+Setting `PORT` by hand moves the server without moving the domain, and every
+request then comes back as a 502 from a container that is running perfectly
+well. `railway domain --port` does not repoint a domain that already exists, so
+the way back is to delete the variable:
+
+```bash
+railway variable delete PORT
+```
+
+Do not set `DATABASE_PATH` or `SETTINGS_PATH` unless the volume is mounted
 somewhere other than `/data`.
 
 ## 4. Expose it
@@ -106,5 +119,12 @@ behind, and the logs will say why.
   its own tick socket and no access to the volume the others hold.
 - **Region.** The service talks to Capital.com on every poll; a region near
   their London endpoints keeps the round trip short.
-- **Backups.** The whole state is three files in `/data`. Railway snapshots the
-  volume, and `railway ssh` reaches it for anything more specific.
+- **Backups.** The whole state is three files in `/data`. Backups are switched
+  on per volume in the dashboard, under the volume's **Backups** tab; there is
+  no CLI command for it. `railway ssh` reaches the files for anything more
+  specific.
+- **Postgres.** Not used, and not needed while the service runs as one replica:
+  the data layer is synchronous SQLite in the same process, which is what makes
+  a once-a-second poll cheap. Moving to Postgres means making every read async
+  all the way up through the strategy code, so it is worth doing for external
+  access or managed backups, and not for capacity.
