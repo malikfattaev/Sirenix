@@ -8,7 +8,7 @@
  * Every row is measured on both halves of the window: the first is where a
  * setting may look good, the second is where it has to prove it.
  *
- * Usage: npx tsx --env-file=.env.local scripts/intraday.ts
+ * Usage: npx tsx --env-file=.env.local scripts/research/intraday.ts
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

@@ -5,12 +5,12 @@
  * that treats a whole day as a single bet: equity indices move together, so
  * simultaneous signals are nowhere near independent observations.
  *
- * Usage: npx tsx --env-file=.env.local scripts/confirmed.ts [threshold stop target hold confirm]
+ * Usage: npx tsx --env-file=.env.local scripts/research/confirmed.ts [threshold stop target hold confirm]
  */
 import { atr as atrSeries, ema, rsi as rsiSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
-import { hourlyCandles } from './hourly';
-import { UNIVERSE } from './universe';
+import { hourlyCandles } from '../lib/hourly';
+import { UNIVERSE } from '../lib/universe';
 
 const BARS = 5000;
 const WARMUP = 120;

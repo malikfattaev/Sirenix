@@ -8,8 +8,8 @@
  */
 import { atr as atrSeries, ema, rsi as rsiSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
-import { hourlyCandles } from './hourly';
-import { UNIVERSE, type UniverseEntry } from './universe';
+import { hourlyCandles } from '../lib/hourly';
+import { UNIVERSE, type UniverseEntry } from '../lib/universe';
 
 const BARS = 5000;
 const WARMUP = 120;

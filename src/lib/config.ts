@@ -318,7 +318,7 @@ export const DEFAULT_TUNING: StrategyTuning = {
    * Trend pullback, S/R bounce, VWAP pullback and failed breakout lost money in
    * all four independent measurements (both instruments x both halves of a
    * 21-day sample), so they are off by default. They are still in the codebase:
-   * re-enable one here and run `scripts/lab.ts` to re-test it on fresh data.
+   * re-enable one here and run `scripts/research/lab.ts` to re-test it on fresh data.
    *
    * News momentum is on but cannot be measured that way: feeds only reach back
    * a few hours, so the replay sees no headlines and the strategy produces

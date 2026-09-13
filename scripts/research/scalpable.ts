@@ -9,12 +9,12 @@
  * Reports the movement available per minute alongside it, because a market can
  * be cheap and still too quiet to be worth trading.
  *
- * Usage: npx tsx --env-file=.env.local scripts/scalpable.ts
+ * Usage: npx tsx --env-file=.env.local scripts/research/scalpable.ts
  */
 import { capital } from '@/lib/capital/client';
 import { atr as atrSeries, lastValue, median } from '@/lib/indicators';
 import { toCandles } from '@/lib/market/candles';
-import { UNIVERSE } from './universe';
+import { UNIVERSE } from '../lib/universe';
 
 const BARS = 1000;
 

@@ -1,12 +1,20 @@
 {
-  "name": "market-signals",
+  "name": "sirenix",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "backtest": "tsx --env-file-if-exists=.env.local scripts/backtest.ts",
+    "probe": "tsx --env-file-if-exists=.env.local scripts/probe.ts",
+    "skips": "tsx --env-file-if-exists=.env.local scripts/skips.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

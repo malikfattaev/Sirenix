@@ -4,7 +4,7 @@
  * Uses hourly candles so the sample spans months rather than weeks, and treats
  * one hour on one day as one observation, because overlapping intraday windows
  * would otherwise inflate the sample size and make noise look significant.
- * Usage: npx tsx --env-file=.env.local scripts/seasonality.ts <hours>
+ * Usage: npx tsx --env-file=.env.local scripts/research/seasonality.ts <hours>
  */
 import { capital } from '@/lib/capital/client';
 import { INSTRUMENTS } from '@/lib/config';

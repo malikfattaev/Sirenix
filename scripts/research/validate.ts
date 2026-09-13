@@ -6,12 +6,12 @@
  * Thirteen equity indices move together, so simultaneous signals are close to
  * one bet, not thirteen, and this reports that clustering explicitly.
  *
- * Usage: npx tsx --env-file=.env.local scripts/validate.ts [bars]
+ * Usage: npx tsx --env-file=.env.local scripts/research/validate.ts [bars]
  */
 import { capital } from '@/lib/capital/client';
 import { atr as atrSeries, ema, rsi as rsiSeries } from '@/lib/indicators';
 import { toCandles, type Candle } from '@/lib/market/candles';
-import { UNIVERSE } from './universe';
+import { UNIVERSE } from '../lib/universe';
 
 const bars = Number(process.argv[2] ?? 5000);
 const WARMUP = 220;
@@ -20,7 +20,6 @@ const STOP_ATR = 6;
 const TARGET_ATR = 6;
 const HOLD_HOURS = 24;
 const COOLDOWN_HOURS = 12;
-const HOUR_MS = 3_600_000;
 
 interface Trade {
   epic: string;

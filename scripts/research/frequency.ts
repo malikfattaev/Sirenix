@@ -1,9 +1,9 @@
 /**
  * How often a signal actually appears: gaps between them, per-day counts and
  * the spread across the trading day.
- * Usage: npx tsx --env-file=.env.local scripts/frequency.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/frequency.ts <days>
  */
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 import { CANDLE_DEPTH, DEFAULT_TUNING, INSTRUMENTS, type TimeframeRole } from '@/lib/config';
 
 import { closedBefore, type Candle } from '@/lib/market/candles';

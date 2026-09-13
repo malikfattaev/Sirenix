@@ -6,12 +6,12 @@
  * does not, so this measures the same kind of signal on hourly candles across
  * horizons from four hours to a week, and reports the edge net of cost.
  *
- * Usage: npx tsx --env-file=.env.local scripts/horizon.ts [bars]
+ * Usage: npx tsx --env-file=.env.local scripts/research/horizon.ts [bars]
  */
 import { capital } from '@/lib/capital/client';
 import { atr as atrSeries, ema, median, rsi as rsiSeries } from '@/lib/indicators';
 import { toCandles, type Candle } from '@/lib/market/candles';
-import { UNIVERSE } from './universe';
+import { UNIVERSE } from '../lib/universe';
 
 const bars = Number(process.argv[2] ?? 5000);
 /** Forward horizons in hours. */

@@ -1,6 +1,6 @@
 /** How much of the session each market regime accounts for. */
-import { loadHistory } from './data';
-import { CANDLE_DEPTH, INSTRUMENTS, TIMEFRAME_ROLES, type Regime, type TimeframeRole } from '@/lib/config';
+import { loadHistory } from '../lib/data';
+import { CANDLE_DEPTH, INSTRUMENTS, type Regime, type TimeframeRole } from '@/lib/config';
 
 import { closedBefore, type Candle } from '@/lib/market/candles';
 import { buildContext, decide } from '@/lib/strategy';

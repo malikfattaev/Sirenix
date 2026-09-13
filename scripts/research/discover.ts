@@ -4,7 +4,7 @@
  * A weak edge is only measurable across many markets, so this collects the
  * liquid, continuously quoted instruments Capital.com offers and ranks them by
  * relative spread, which is the cost every strategy has to clear.
- * Usage: npx tsx --env-file=.env.local scripts/discover.ts
+ * Usage: npx tsx --env-file=.env.local scripts/research/discover.ts
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';

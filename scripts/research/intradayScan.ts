@@ -5,7 +5,7 @@
  * the one the hour-scale continuation signal handles best. Each is scored on
  * both halves of the window; a market that only works in one is noise.
  *
- * Usage: npx tsx --env-file=.env.local scripts/intradayScan.ts
+ * Usage: npx tsx --env-file=.env.local scripts/research/intradayScan.ts
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

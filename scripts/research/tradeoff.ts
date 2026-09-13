@@ -6,12 +6,12 @@
  * numbers rather than on feel. Each row is checked on both halves of the
  * window: a setting that only works on one of them is noise.
  *
- * Usage: npx tsx --env-file=.env.local scripts/tradeoff.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/tradeoff.ts <days>
  */
 import { DEFAULT_TUNING, INSTRUMENTS, type StrategyKey } from '@/lib/config';
 import { replay, type BacktestData, type BacktestResult } from '@/lib/backtest/engine';
 import { STRATEGIES } from '@/lib/strategy';
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 
 const days = Number(process.argv[2] ?? 21);
 

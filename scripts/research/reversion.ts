@@ -6,11 +6,11 @@
  * coefficient does not pay for anything on its own, so this measures the actual
  * move in the extreme buckets and nets off the spread that trading them costs.
  *
- * Usage: npx tsx --env-file=.env.local scripts/reversion.ts
+ * Usage: npx tsx --env-file=.env.local scripts/research/reversion.ts
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { FEATURE_NAMES } from './universe';
+import { FEATURE_NAMES } from '../lib/universe';
 
 interface Row {
   epic: string;

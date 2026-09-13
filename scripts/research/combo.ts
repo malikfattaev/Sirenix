@@ -1,9 +1,9 @@
 /**
  * Tests specific sets of strategies against both halves of the history.
- * Usage: npx tsx --env-file=.env.local scripts/combo.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/combo.ts <days>
  */
 import { DEFAULT_TUNING, INSTRUMENTS, type StrategyKey } from '@/lib/config';
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 import { replay, type BacktestData } from '@/lib/backtest/engine';
 
 const days = Number(process.argv[2] ?? 21);

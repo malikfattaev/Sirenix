@@ -3,10 +3,10 @@
  *
  * The first half is where an idea is allowed to look good; the second half is
  * where it has to prove it. A strategy that only works on one of them is noise.
- * Usage: npx tsx --env-file=.env.local scripts/lab.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/lab.ts <days>
  */
 import { DEFAULT_TUNING, INSTRUMENTS, type StrategyKey } from '@/lib/config';
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 import { replay, type BacktestData, type BacktestResult } from '@/lib/backtest/engine';
 import { STRATEGIES } from '@/lib/strategy';
 

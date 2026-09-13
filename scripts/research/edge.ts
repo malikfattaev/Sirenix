@@ -4,9 +4,9 @@
  * Measures the forward move after every signal, in 5m ATR units, against the
  * drift of the market itself over the same horizon. A system with no edge
  * matches the baseline; the spread then turns "no edge" into a loss.
- * Usage: npx tsx --env-file=.env.local scripts/edge.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/edge.ts <days>
  */
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 import { CANDLE_DEPTH, DEFAULT_TUNING, INSTRUMENTS, type StrategyKey, type TimeframeRole } from '@/lib/config';
 
 import { closedBefore, type Candle } from '@/lib/market/candles';

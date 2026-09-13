@@ -9,14 +9,14 @@
  * Indicator series are computed once per instrument and indexed into, rather
  * than recomputed at every bar, which is what makes a universe this size cheap.
  *
- * Usage: npx tsx --env-file=.env.local scripts/pooled.ts [bars]
+ * Usage: npx tsx --env-file=.env.local scripts/research/pooled.ts [bars]
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { capital } from '@/lib/capital/client';
 import { atr as atrSeries, ema, median, rsi as rsiSeries } from '@/lib/indicators';
 import { toCandles, type Candle } from '@/lib/market/candles';
-import { FEATURE_NAMES, HORIZON_BARS, UNIVERSE } from './universe';
+import { FEATURE_NAMES, HORIZON_BARS, UNIVERSE } from '../lib/universe';
 
 const bars = Number(process.argv[2] ?? 5000);
 const HORIZONS = HORIZON_BARS;

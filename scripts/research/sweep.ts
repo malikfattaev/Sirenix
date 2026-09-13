@@ -1,10 +1,10 @@
 /**
  * Threshold sweep: downloads history once per instrument, then replays the same
  * candles under different settings so changes can be judged on evidence.
- * Usage: npx tsx --env-file=.env.local scripts/sweep.ts <days> <field=a,b,c> ...
+ * Usage: npx tsx --env-file=.env.local scripts/research/sweep.ts <days> <field=a,b,c> ...
  */
 import { DEFAULT_TUNING, INSTRUMENTS, type StrategyTuning } from '@/lib/config';
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 import { replay, type BacktestData, type BacktestResult } from '@/lib/backtest/engine';
 
 const days = Number(process.argv[2] ?? 6);

@@ -7,7 +7,7 @@
  * if it points the same way on both, which is what separates an edge from a
  * pattern that happened to fit one stretch of market.
  *
- * Usage: npx tsx --env-file=.env.local scripts/research.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/features.ts <days>
  */
 import { CANDLE_DEPTH, INSTRUMENTS, type TimeframeRole } from '@/lib/config';
 import { rangeOf, sessionVwap } from '@/lib/indicators';
@@ -15,7 +15,7 @@ import { closedBefore, type Candle } from '@/lib/market/candles';
 import { sessionStart } from '@/lib/market/session';
 import { buildViews } from '@/lib/strategy';
 import type { Views } from '@/lib/strategy/types';
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 
 const days = Number(process.argv[2] ?? 21);
 /** Forward horizons in one-minute bars. */

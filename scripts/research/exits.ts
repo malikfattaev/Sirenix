@@ -2,10 +2,10 @@
  * Exit-management study: same entries, different ways of managing the position.
  * Both halves of the history are reported, because a management rule can fit
  * one stretch of market just as easily as an entry rule can.
- * Usage: npx tsx --env-file=.env.local scripts/exits.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/exits.ts <days>
  */
 import { DEFAULT_TUNING, INSTRUMENTS, type ExitPolicy } from '@/lib/config';
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 import { replay, type BacktestData } from '@/lib/backtest/engine';
 
 const days = Number(process.argv[2] ?? 21);

@@ -2,12 +2,12 @@
  * Full due diligence on the chosen configuration, plus the honest picture of
  * what happens when the target is pulled in far enough to chase a 70% win rate.
  *
- * Usage: npx tsx --env-file=.env.local scripts/final.ts [bars]
+ * Usage: npx tsx --env-file=.env.local scripts/research/final.ts [bars]
  */
 import { atr as atrSeries, ema, rsi as rsiSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
-import { hourlyCandles } from './hourly';
-import { UNIVERSE } from './universe';
+import { hourlyCandles } from '../lib/hourly';
+import { UNIVERSE } from '../lib/universe';
 
 const bars = Number(process.argv[2] ?? 5000);
 const WARMUP = 220;

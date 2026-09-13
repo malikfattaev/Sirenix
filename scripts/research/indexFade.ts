@@ -6,12 +6,12 @@
  * and, unlike everything at scalping horizons, large enough to clear the spread.
  * This turns it into actual trades with entry, stop, target and real costs.
  *
- * Usage: npx tsx --env-file=.env.local scripts/indexFade.ts [bars]
+ * Usage: npx tsx --env-file=.env.local scripts/research/indexFade.ts [bars]
  */
 import { capital } from '@/lib/capital/client';
 import { atr as atrSeries, ema, rsi as rsiSeries } from '@/lib/indicators';
 import { toCandles, type Candle } from '@/lib/market/candles';
-import { UNIVERSE } from './universe';
+import { UNIVERSE } from '../lib/universe';
 
 const bars = Number(process.argv[2] ?? 5000);
 const WARMUP = 220;

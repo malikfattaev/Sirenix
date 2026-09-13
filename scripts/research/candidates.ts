@@ -6,11 +6,11 @@
  * strategies find anything in it. Each market is scored on both halves of the
  * window, because a result that only holds in one is noise.
  *
- * Usage: npx tsx --env-file=.env.local scripts/candidates.ts <days>
+ * Usage: npx tsx --env-file=.env.local scripts/research/candidates.ts <days>
  */
 import type { InstrumentConfig } from '@/lib/config';
 import { replay, type BacktestResult } from '@/lib/backtest/engine';
-import { loadHistory } from './data';
+import { loadHistory } from '../lib/data';
 
 const days = Number(process.argv[2] ?? 14);
 

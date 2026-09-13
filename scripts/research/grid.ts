@@ -5,12 +5,12 @@
  * positive expectancy in *both* halves of the history. A configuration that
  * only works in one half is rejected no matter how good its headline looks.
  *
- * Usage: npx tsx --env-file=.env.local scripts/grid.ts [bars]
+ * Usage: npx tsx --env-file=.env.local scripts/research/grid.ts [bars]
  */
 import { atr as atrSeries, ema, rsi as rsiSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
-import { hourlyCandles } from './hourly';
-import { UNIVERSE } from './universe';
+import { hourlyCandles } from '../lib/hourly';
+import { UNIVERSE } from '../lib/universe';
 
 const bars = Number(process.argv[2] ?? 5000);
 const WARMUP = 220;
