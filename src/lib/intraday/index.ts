@@ -1,4 +1,4 @@
-import { INTRADAY, type InstrumentConfig } from '@/lib/config';
+import { INTRADAY, intradayTuning, type IntradayTuning, type InstrumentConfig } from '@/lib/config';
 import { atr as atrSeries, ema, lastValue, rsi as rsiSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
 import type { Quote } from '@/lib/quotes';
@@ -24,8 +24,8 @@ export interface IntradayRead {
   confirmed: boolean;
 }
 
-export function readIntraday(candles: Candle[]): IntradayRead | null {
-  if (candles.length < INTRADAY.lookback + 40) return null;
+export function readIntraday(candles: Candle[], tuning: IntradayTuning = INTRADAY): IntradayRead | null {
+  if (candles.length < tuning.lookback + 40) return null;
 
   const closes = candles.map((candle) => candle.close);
   const atr = lastValue(atrSeries(candles, 14));
@@ -35,7 +35,7 @@ export function readIntraday(candles: Candle[]): IntradayRead | null {
 
   const last = candles[candles.length - 1];
   const close = last.close;
-  const past = closes[closes.length - 1 - INTRADAY.lookback];
+  const past = closes[closes.length - 1 - tuning.lookback];
   if (past <= 0) return null;
 
   const stretch = ((close - past) / atr + (rsi - 50) / 20 + (close - ema20) / atr) / 3;
@@ -52,8 +52,9 @@ export function analyseIntraday(
   candles: Candle[],
   quote: Quote | undefined,
   now: number,
+  tuning: IntradayTuning = intradayTuning(instrument.id),
 ): Signal {
-  const read = readIntraday(candles);
+  const read = readIntraday(candles, tuning);
   const last = candles[candles.length - 1];
   const decimals = quote?.decimals ?? 2;
   const price = quote?.price || last?.close || 0;
@@ -78,54 +79,66 @@ export function analyseIntraday(
     updatedAt: now,
   };
 
-  const wait = (cause: string, reasons: string[] = []): Signal => ({
+  const wait = (code: string, cause: string, reasons: string[] = []): Signal => ({
     ...base,
     type: 'WAIT',
     score: 0,
     plan: null,
     reasons,
     blockedBy: `${STANDING_ASIDE} ${cause}`,
+    rejections: [{ code, detail: cause }],
   });
 
-  if (!read) return wait('пока мало истории на 15м');
+  if (!read) return wait('history', 'пока мало истории на 15м');
   if (base.marketStatus !== 'TRADEABLE') {
-    return wait('рынок закрыт');
+    return wait('market_closed', 'рынок закрыт');
+  }
+  if (!quote || quote.bid === null || quote.ask === null ||
+      !Number.isFinite(quote.bid) || !Number.isFinite(quote.ask) ||
+      quote.bid <= 0 || quote.ask < quote.bid) {
+    return wait('quote_missing', 'нет корректной цены покупки и продажи');
   }
 
   const strength = Math.abs(read.stretch);
   const move = read.changePercent;
   const context = [
-    `Движение за ${HOLD_MINUTES} мин ${move >= 0 ? '+' : ''}${move.toFixed(2)}%, сила ${strength.toFixed(2)} из ${INTRADAY.threshold} нужных`,
+    `Движение за ${tuning.lookback * 15} мин ${move >= 0 ? '+' : ''}${move.toFixed(2)}%, сила ${strength.toFixed(2)} из ${tuning.threshold} нужных`,
     `RSI на 15м ${read.rsi.toFixed(0)}`,
   ];
 
-  if (strength < INTRADAY.threshold) return wait('движение слишком слабое, чтобы входить', context);
-  if (!read.confirmed) return wait('последняя свеча 15м закрылась против движения', context);
+  if (strength < tuning.threshold) return wait('strength', 'движение слишком слабое, чтобы входить', context);
+  if (!read.confirmed) return wait('confirmation', 'последняя свеча 15м закрылась против движения', context);
 
   const isLong = read.stretch > 0;
   const side = isLong ? 1 : -1;
+  const fill = isLong ? quote.ask : quote.bid;
+  const entry = round(fill);
+  const stopLoss = round(fill - side * tuning.stopAtr * read.atr);
+  const takeProfit = round(fill + side * tuning.targetAtr * read.atr);
+  const risk = Math.abs(entry - stopLoss);
+  if (risk === 0 || takeProfit === entry) return wait('plan', 'уровни совпали после округления');
 
   return {
     ...base,
     type: isLong ? 'LONG' : 'SHORT',
-    score: Math.min(100, Math.round((strength / INTRADAY.scoreCeiling) * 100)),
+    score: Math.min(100, Math.round((strength / tuning.scoreCeiling) * 100)),
     strategy: 'intraday-momentum',
     strategyLabel: 'Импульс внутри дня',
     plan: {
-      entryLow: round(price - 0.2 * read.atr),
-      entryHigh: round(price + 0.2 * read.atr),
-      entry: round(price),
-      stopLoss: round(price - side * INTRADAY.stopAtr * read.atr),
-      takeProfit: round(price + side * INTRADAY.targetAtr * read.atr),
+      entryLow: round(fill - 0.2 * read.atr),
+      entryHigh: round(fill + 0.2 * read.atr),
+      entry,
+      stopLoss,
+      takeProfit,
       takeProfit2: null,
-      riskReward: Number((INTRADAY.targetAtr / INTRADAY.stopAtr).toFixed(2)),
-      stopReason: `Стоп в ${INTRADAY.stopAtr} ATR на 15м, за шумом движения`,
-      targetReason: `Цель в ${INTRADAY.targetAtr} ATR на 15м, столько такой толчок обычно добавляет`,
+      riskReward: Number((Math.abs(takeProfit - entry) / risk).toFixed(2)),
+      stopReason: `Стоп в ${tuning.stopAtr} ATR на 15м, за шумом движения`,
+      targetReason: `Цель в ${tuning.targetAtr} ATR на 15м`,
     },
     reasons: [
       isLong
-        ? `Прошёл ${Math.abs(move).toFixed(2)}% за час и закрылся на максимумах`
-        : `Упал на ${Math.abs(move).toFixed(2)}% за час и закрылся на минимумах`,
+        ? `Вырос на ${Math.abs(move).toFixed(2)}% за ${tuning.lookback * 15} мин, последняя свеча растущая`
+        : `Упал на ${Math.abs(move).toFixed(2)}% за ${tuning.lookback * 15} мин, последняя свеча падающая`,
       `RSI на 15м ${read.rsi.toFixed(0)}, сила ${strength.toFixed(2)}`,
       `Закрытие через ${HOLD_MINUTES} минут, дошла цель или нет`,
     ],

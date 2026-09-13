@@ -398,6 +398,24 @@ export const INTRADAY = {
   scoreCeiling: 3.5,
 } as const;
 
+export interface IntradayTuning {
+  lookback: number;
+  threshold: number;
+  stopAtr: number;
+  targetAtr: number;
+  scoreCeiling: number;
+}
+
+// Separate profiles; keep the baseline until an independent sample supports a change.
+export const INTRADAY_BY_MARKET: Record<string, IntradayTuning> = {
+  GOLD: { ...INTRADAY },
+  BRENT: { ...INTRADAY },
+};
+
+export function intradayTuning(instrumentId: string): IntradayTuning {
+  return INTRADAY_BY_MARKET[instrumentId] ?? INTRADAY;
+}
+
 /**
  * A market carries one direction at a time.
  *
