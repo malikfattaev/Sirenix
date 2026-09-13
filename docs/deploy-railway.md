@@ -43,10 +43,15 @@ In the service, **Settings → Volumes → Add volume**, with the mount path:
 ```
 
 The image already points `DATABASE_PATH` and `SETTINGS_PATH` at that directory,
-so nothing else has to be configured. A volume can only be attached to one
-container at a time, which is why `railway.json` pins `numReplicas` to 1 and
-sets `overlapSeconds` to 0: the old container must release the volume before the
-new one claims it.
+so nothing else has to be configured. `railway.json` declares `/data` as a
+`requiredMountPath`, so a deployment without the volume is refused rather than
+quietly started on an empty database.
+
+A volume can only be attached to one container at a time, which is why
+`numReplicas` is pinned to 1 and `overlapSeconds` to 0: the old container must
+release the volume before the new one claims it. `sleepApplication` is off for
+the same reason the service is not serverless — a process paused between
+requests loses its tick socket.
 
 ## 3. Set the variables
 
@@ -103,5 +108,3 @@ behind, and the logs will say why.
   their London endpoints keeps the round trip short.
 - **Backups.** The whole state is three files in `/data`. Railway snapshots the
   volume, and `railway ssh` reaches it for anything more specific.
-- **Sleeping.** Serverless or app-sleeping modes must stay off: a process that
-  is paused between requests loses the tick socket and the caches behind it.
