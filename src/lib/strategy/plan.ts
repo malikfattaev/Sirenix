@@ -4,7 +4,7 @@ import { REGIME } from '@/lib/config';
 import { nearestLevel, sign } from './strategies/shared';
 import type { MarketContext, StrategyCandidate, TradePlan } from './types';
 
-export type PlanResult = { ok: true; plan: TradePlan } | { ok: false; detail: string };
+export type PlanResult = { ok: true; plan: TradePlan } | { ok: false; code: 'spread' | 'risk' | 'target'; detail: string };
 
 /**
  * Turns a proposed setup into concrete numbers.
@@ -45,7 +45,8 @@ export function buildPlan(
     stopReason = `Стоп ${format(round(stopLoss))} расширен, чтобы вынести шум и спред`;
   }
   if (risk > maxRisk) {
-    return { ok: false, detail: `стоп встал бы в ${(risk / setup.atr).toFixed(1)} ATR, слишком далеко для скальпа` };
+    return { ok: false, code: tuning.minRiskToSpread * context.spread > maxRisk ? 'spread' : 'risk',
+      detail: `стоп встал бы в ${(risk / setup.atr).toFixed(1)} ATR, слишком далеко для скальпа` };
   }
 
   // --- Targets -------------------------------------------------------------
@@ -84,7 +85,7 @@ export function buildPlan(
         : Math.abs(nearest - price) < minReward
           ? `ближайшая цель даёт только 1:${(Math.abs(nearest - fill) / risk).toFixed(1)}`
           : `ближайшая цель в ${(Math.abs(nearest - fill) / setup.atr).toFixed(1)} ATR, слишком далеко для скальпа`;
-    return { ok: false, detail: shortfall };
+    return { ok: false, code: tuning.minRewardToSpread * context.spread > maxReward ? 'spread' : 'target', detail: shortfall };
   }
 
   const takeProfit2 = ahead.find((value) => s * (value - takeProfit) > 0.3 * setup.atr) ?? null;

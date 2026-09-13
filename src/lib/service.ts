@@ -1,5 +1,6 @@
 import type { InstrumentConfig } from '@/lib/config';
 import { recordSignal, resolveOpenSignals } from '@/lib/db';
+import { recordSkip } from '@/lib/db/skips';
 import { withPosition } from '@/lib/position';
 import { activeInstruments, activeTuning, horizonsFor } from '@/lib/settings';
 import { analyseIntraday } from '@/lib/intraday';
@@ -34,6 +35,7 @@ function tradable(signal: Signal, quote: Quote | undefined): Signal {
     strategyLabel: null,
     plan: null,
     blockedBy: `${STANDING_ASIDE} ${cause}`,
+    rejections: [{ code: quote.open ? 'stale_quote' : 'market_closed', detail: cause }],
   };
 }
 
@@ -87,7 +89,7 @@ export async function analyseInstrument(
   });
 
   if (!context) {
-    return {
+    const signal: Signal = {
       ...base,
       type: 'WAIT',
       score: 0,
@@ -99,7 +101,10 @@ export async function analyseInstrument(
       plan: null,
       reasons: ['The feed has not returned enough candles for a reliable read'],
       blockedBy: 'Not enough price history yet',
+      rejections: [{ code: 'history', detail: 'Not enough price history yet' }],
     };
+    recordSkip(signal);
+    return signal;
   }
 
   const decision = decide(context, activeTuning());
@@ -118,12 +123,14 @@ export async function analyseInstrument(
         plan: decision.plan,
         reasons: decision.reasons,
         blockedBy: decision.blockedBy,
+        rejections: decision.rejections,
       },
       quote,
     ),
   );
 
   recordSignal(signal);
+  recordSkip(signal);
   return signal;
 }
 
@@ -158,6 +165,7 @@ export async function analyseAllInstruments(): Promise<Signal[]> {
           tradable(analyseIntraday(instrument, candles, quote, now), quote),
         );
         recordSignal(intraday);
+        recordSkip(intraday);
       }
 
       return [scalp, intraday].filter((signal) => signal !== null);

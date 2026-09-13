@@ -42,6 +42,7 @@ export function withPosition(signal: Signal): Signal {
       signal,
       `${streak.count} убытка подряд, рынок на паузе ещё ${hours(streakUntil - signal.updatedAt)}`,
       `Cut off after ${streak.count} losses in a row rather than sitting through the run`,
+      'loss_streak',
     );
   }
 
@@ -53,11 +54,12 @@ export function withPosition(signal: Signal): Signal {
     signal,
     `пауза после убытка, ещё ${minutes(until - signal.updatedAt)} мин`,
     'Standing off after a losing trade rather than re-entering into the same move',
+    'loss_cooldown',
   );
 }
 
 /** Turns a signal into a refusal that says why. */
-function standAside(signal: Signal, cause: string, reason: string): Signal {
+function standAside(signal: Signal, cause: string, reason: string, code: string): Signal {
   return {
     ...signal,
     type: 'WAIT',
@@ -67,6 +69,9 @@ function standAside(signal: Signal, cause: string, reason: string): Signal {
     plan: null,
     reasons: [reason],
     blockedBy: `${STANDING_ASIDE} ${cause}`,
+    rejections: [{ code, detail: cause, strategy: signal.strategy ?? undefined,
+      direction: signal.type === 'WAIT' ? undefined : signal.type,
+      score: signal.score, plan: signal.plan ?? undefined }],
   };
 }
 
@@ -106,6 +111,7 @@ const LATE_AFTER_R = 0.5;
 function running(signal: Signal, open: SignalRecord): Signal {
   return {
     ...signal,
+    rejections: undefined,
     type: open.direction,
     score: open.score,
     strategy: open.strategy as StrategyKey,

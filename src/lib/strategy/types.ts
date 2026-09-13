@@ -111,6 +111,7 @@ export interface TradePlan {
 /** Scalps are minutes long; swing signals are held for a day or two. */
 
 export interface Signal {
+  rejections?: SignalRejection[];
   instrumentId: string;
   epic: string;
   label: string;
@@ -140,4 +141,13 @@ export interface Signal {
    */
   note?: string | null;
   updatedAt: number;
+}
+
+export interface SignalRejection {
+  code: string;
+  detail: string;
+  strategy?: string;
+  direction?: Direction;
+  score?: number;
+  plan?: TradePlan;
 }
