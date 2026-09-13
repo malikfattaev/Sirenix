@@ -1,0 +1,25 @@
+# Everything the image builds for itself, or must never contain.
+node_modules
+.next
+out
+build
+
+# Local state: the deployed database and settings live on a mounted volume.
+data
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Source control and tooling
+.git
+.gitignore
+.github
+.claude
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# Research notes, not needed to run the app
+docs

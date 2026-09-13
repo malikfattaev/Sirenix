@@ -20,7 +20,7 @@ so moving between them never restarts the analysis or drops the quote stream.
 
 | Section | Module | What it is |
 | --- | --- | --- |
-| Итог | `/` Дешборд | Signals issued, how many ended in profit, how many are running, with the record underneath |
+| Итог | `/` Панель управления | Signals issued, how many ended in profit, how many are running, with the record underneath |
 | Рынок | `/signals` Сигналы | The live cards, two per market |
 | Рынок | `/news` Новости | The headline reading per market, with the stories behind it |
 | Система | `/settings` Настройки | Which markets are on the board, how selective the engine is, and the backtest |
@@ -55,6 +55,10 @@ cp .env.example .env.local   # fill in your Capital.com API key, email and API p
 npm install
 npm run dev
 ```
+
+`npm test` runs the entry, exit-side and journal checks; `npm run typecheck` and
+`npm run lint` cover the rest. Deployment is described in
+[docs/deploy-railway.md](docs/deploy-railway.md).
 
 ## How a scalping signal is produced
 
@@ -128,6 +132,12 @@ is actually running.
 
 ## How an intraday signal is produced
 
+Entry uses the live ask for LONG and bid for SHORT; missing/invalid bid and ask
+block a new signal. Stop and target are anchored to that fill. Market-specific
+parameters live in `INTRADAY_BY_MARKET` in `src/lib/config.ts`; GOLD and BRENT
+currently keep the same baseline after the [separate-market check](docs/intraday-check-2026-09-08.md).
+The common holding time stays 60 minutes.
+
 `src/lib/intraday/index.ts` measures how far 15-minute price has been pushed, as the average of
 three views: the move over the last hour, RSI, and distance from the 20-bar mean. Past a threshold,
 and only if the signal bar closed in the same direction, it joins the move with a 2.5 ATR stop and a
@@ -172,20 +182,25 @@ to work in both.
 The `STRATEGY CHECK` panel on the page replays 3, 7 or 14 days.
 
 ```bash
-npx tsx --env-file=.env.local scripts/backtest.ts 7        # per-strategy results
-npx tsx --env-file=.env.local scripts/tradeoff.ts 21       # signal frequency vs win rate
-npx tsx --env-file=.env.local scripts/frequency.ts 7       # how often a signal appears
-npx tsx --env-file=.env.local scripts/scalpable.ts         # spread relative to 1m ATR, 70+ markets
-npx tsx --env-file=.env.local scripts/candidates.ts 14     # the engine on markets not on the board
-npx tsx --env-file=.env.local scripts/intradayScan.ts      # the intraday signal across markets
-npx tsx --env-file=.env.local scripts/probe.ts             # one live read, printed in full
+npm run backtest 7                                   # per-strategy results
+npm run probe                                        # one live read, printed in full
+npx tsx scripts/research/tradeoff.ts 21              # signal frequency vs win rate
+npx tsx scripts/research/frequency.ts 7              # how often a signal appears
+npx tsx scripts/research/scalpable.ts                # spread relative to 1m ATR, 70+ markets
+npx tsx scripts/research/candidates.ts 14            # the engine on markets not on the board
+npx tsx scripts/research/intradayScan.ts             # the intraday signal across markets
 ```
+
+The `npx tsx` lines read no environment file of their own; prefix them with
+`--env-file-if-exists=.env.local` when the credentials are not already exported.
 
 ## What the measurements actually say
 
-Reported plainly, because the numbers are the point of the tool. Entries and both exits are priced
-on the traded side of the book, so this is what the money would have done rather than what the mid
-suggests. Every window is split in half and a setting has to work in both.
+The tables below are earlier research results, not a validation of the current
+live implementation. The [September 8 separate-market check](docs/intraday-check-2026-09-08.md)
+uses production intraday entries and exit-side candle checks; none of its tested
+variants was positive in both periods on either market. Older research scripts
+may use different fill, exit and cooldown assumptions.
 
 **Minute-scale scalping does not work on Brent, and is a coin toss on gold.** Over 31 days of
 one-minute candles:
@@ -198,7 +213,7 @@ one-minute candles:
 | 70 | 14 trades, 21.4% win, −7.2R | 23 trades, 30.4% win, −5.6R |
 
 Raising the bar does not rescue it; it just trades less while still losing. Run strategy by strategy
-on both halves (`scripts/lab.ts`), **not one setup is positive in both halves on either market**.
+on both halves (`scripts/research/lab.ts`), **not one setup is positive in both halves on either market**.
 The cause is the spread: a Brent round trip costs 0.70 of a one-minute move, the worst of the 72
 markets screened, against a short-term edge measured at around 0.04 ATR.
 
@@ -224,6 +239,20 @@ factors, not a 74% chance. Signals in the replay average a score near 69 and win
 of the time depending on the market and the horizon.
 
 ## Signal history
+
+Rejected readings are stored separately in SQLite `signal_skips`. The first WAIT
+snapshot per market, horizon, reason code and minute is retained, so browser poll
+frequency does not multiply the count. These are minute samples, not unique
+missed trading opportunities. Snapshots include quotes, reasons and rejected
+plans when available (score and cooldown rejections). They do not count as trades
+or affect signal statistics. Collection happens on analysis requests, not while
+the application is idle with no polling clients.
+
+Inspect: `npm run skips`, or authenticated `GET /api/skips?limit=50`
+(latest snapshots and a 24-hour summary, maximum limit 100).
+
+Verify the entry, exit-side and journal behavior:
+`npm test`.
 
 Every signal is recorded in SQLite with the deadline it was issued under, then followed to its
 conclusion. A signal issued on terms that no longer exist here, because its market or its horizon
