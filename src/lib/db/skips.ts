@@ -1,6 +1,29 @@
+import type Database from 'better-sqlite3';
 import { connection } from './connection';
 import type { Signal } from '@/lib/strategy/types';
 import type { Horizon } from '@/lib/config';
+
+/**
+ * How long a rejected snapshot is worth keeping.
+ *
+ * Nothing reads further back than a day: the summary covers twenty-four hours
+ * and the listing takes the newest a hundred rows. A week leaves room to look
+ * into something that happened over a weekend, and a limit of some kind is not
+ * optional — a snapshot is an entire signal in JSON, and the analysis loop
+ * files one a minute per market for as long as the server runs.
+ */
+const RETENTION_MS = 7 * 86_400_000;
+
+/** Deleting is a scan, so it runs on a clock of its own rather than per insert. */
+const PRUNE_INTERVAL_MS = 60 * 60_000;
+let prunedAt = 0;
+
+function prune(instance: Database.Database): void {
+  const now = Date.now();
+  if (now - prunedAt < PRUNE_INTERVAL_MS) return;
+  prunedAt = now;
+  instance.prepare('DELETE FROM signal_skips WHERE created_at < ?').run(now - RETENTION_MS);
+}
 
 let ready = false;
 function db() {
@@ -33,6 +56,7 @@ export function recordSkip(signal: Signal): void {
     for (const code of codes) insert.run(signal.instrumentId, signal.horizon,
       Math.floor(signal.updatedAt / 60_000), code, signal.updatedAt, JSON.stringify(signal));
   })();
+  prune(instance);
 }
 
 export function recentSkips(limit = 50) {

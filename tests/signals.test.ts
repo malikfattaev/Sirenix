@@ -88,6 +88,31 @@ before(async () => {
 });
 after(() => { database.connection().close(); rmSync(directory, { recursive: true, force: true }); });
 
+// Runs before the other journal tests on purpose: pruning is on an hourly clock,
+// and the first write of the process is the one that pays for it.
+test('journal drops snapshots older than its retention window', () => {
+  const signal = analyseIntraday(gold, bars(1), quote(2158), now, { ...INTRADAY, threshold: 100 });
+  const stale = Date.now() - 8 * 86_400_000;
+  // A read creates the table without writing, so the stale row is in place
+  // before the first write of the process triggers the prune.
+  journal.recentSkips(1);
+  database
+    .connection()
+    .prepare(
+      `INSERT INTO signal_skips (instrument_id, horizon, minute, code, created_at, snapshot)
+       VALUES ('GOLD', 'intraday', ?, 'stale', ?, '{}')`,
+    )
+    .run(Math.floor(stale / 60_000), stale);
+
+  journal.recordSkip(signal);
+
+  const remaining = database
+    .connection()
+    .prepare("SELECT COUNT(*) AS n FROM signal_skips WHERE code = 'stale'")
+    .get() as { n: number };
+  assert.equal(remaining.n, 0);
+});
+
 test('journal persists WAIT snapshots, deduplicates polls and keeps markets/horizons separate', () => {
   const signal = analyseIntraday(gold, bars(1), quote(2158), now, { ...INTRADAY, threshold: 100 });
   journal.recordSkip(signal);

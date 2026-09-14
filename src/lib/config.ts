@@ -493,6 +493,30 @@ export const NEWS_REFRESH_INTERVAL_MS = 30_000;
 export const QUOTE_CACHE_MS = 700;
 
 /**
+ * The server's own analysis clock.
+ *
+ * Everything above is a browser polling the server. On its own that makes the
+ * record a log of when somebody happened to be watching: no open tab means no
+ * analysis, so no signal is issued and, worse, no signal already running is
+ * followed to its stop or its target. The loop below is what makes the history
+ * mean something — the engine runs whether or not anyone is looking.
+ *
+ * The open interval is deliberately finer than the minute the entry candle
+ * closes on, because an exit is also checked against the live quote, and a
+ * level taken out now should be settled now rather than at the next bar.
+ */
+export const ANALYSIS_LOOP = {
+  /** Let the server finish coming up before the first sweep. */
+  startupDelayMs: 5_000,
+  /** While any market has a session running. */
+  openIntervalMs: 15_000,
+  /** While every market is closed: nothing moves, so nothing is missed. */
+  closedIntervalMs: 5 * 60_000,
+  /** After a sweep that threw — a lost socket, a refused session, a timeout. */
+  retryIntervalMs: 30_000,
+} as const;
+
+/**
  * How long a price may go unchanged before it stops counting as live.
  *
  * Measured on this account, the REST snapshot can sit minutes behind on a
