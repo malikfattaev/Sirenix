@@ -57,14 +57,14 @@ export interface InstrumentConfig {
    * Horizons this market runs on, and the starting point for the settings
    * module, which can change it per market at any time.
    *
-   * Worth knowing while reading these: over 31 days of one-minute candles the
-   * minute engine is negative on Brent at every threshold tried, 23% win and
-   * -23.4R, the worst of any market screened, because its round trip costs 0.70
-   * of a one-minute move. Gold is about break-even there. Both are positive on
-   * both halves at the hour scale. Those numbers sit on the settings page next
-   * to the switch, so the choice is made in front of them rather than behind
-   * them. Research scripts that build instruments on the fly leave this out and
-   * get both.
+   * Both markets run on `scalp` alone. The quarter-hour engine was measured
+   * across nine stop/target and threshold combinations on each: on Brent every
+   * one of the nine is negative over both halves of the sample, and on gold the
+   * best of them turns +10.8R in the half it was found in into -2.0R in the
+   * half it was not, which is the shape of a fitted parameter rather than of an
+   * edge. It stays off until something measured on data it has not seen says
+   * otherwise. Research scripts that build instruments on the fly leave this
+   * out and get every horizon.
    */
   horizons?: Horizon[];
 }
@@ -74,7 +74,7 @@ export const INSTRUMENTS: InstrumentConfig[] = [
     id: 'GOLD',
     epic: 'GOLD',
     label: 'GOLD',
-    horizons: ['scalp', 'intraday'],
+    horizons: ['scalp'],
     news: {
       feeds: ['investing-commodities', 'investing-commodity-news', 'fxstreet', 'marketwatch'],
       match: ['gold', 'bullion', 'xau', 'precious metal', 'safe haven', 'safe-haven'],
@@ -84,7 +84,7 @@ export const INSTRUMENTS: InstrumentConfig[] = [
     id: 'BRENT',
     epic: 'OIL_BRENT',
     label: 'BRENT OIL',
-    horizons: ['scalp', 'intraday'],
+    horizons: ['scalp'],
     news: {
       feeds: ['oilprice', 'investing-commodities', 'investing-commodity-news', 'cnbc-energy', 'fxstreet'],
       match: ['oil', 'brent', 'crude', 'wti', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
@@ -469,8 +469,14 @@ export const POSITION: {
  * win nor the loss the entry was reasoned about.
  */
 export const SIGNAL_LIFETIME_MS: Record<Horizon, number | null> = {
-  scalp: null,
-  intraday: null,
+  // Twenty minutes, because that is the number the measurement picked. Over 14
+  // days of one-minute candles on both markets the same entries returned -6.5R
+  // held for 20 minutes, -7.2R for an hour and -10.4R for anything longer, and
+  // past four hours the table stops moving because no trade lives that long
+  // anyway. Removing the cut does not let winners run; it lets the trades that
+  // were being closed small reach a full stop instead.
+  scalp: 20 * 60_000,
+  intraday: INTRADAY.holdBars * TIMEFRAME_MS.MINUTE_15,
 };
 
 /**

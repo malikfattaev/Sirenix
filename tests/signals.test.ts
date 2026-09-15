@@ -143,20 +143,30 @@ test('cooldown journal preserves the rejected direction, score and plan', async 
   assert.equal(journal.recentSkips(1)[0].signal.rejections![0].score, candidate.score);
 });
 
-test('a signal carries no deadline and is never settled by the clock', async () => {
+test('a signal is settled by its deadline, and only when it has one', async () => {
   const { recordSignal, resolveOpenSignals } = await import('@/lib/db');
+  const { SIGNAL_LIFETIME_MS } = await import('@/lib/config');
   const candidate = analyseIntraday(gold, bars(1), quote(2158), now);
   const recorded = recordSignal({ ...candidate, instrumentId: 'BRENT' })!;
-  assert.equal(recorded.expiresAt, 0);
+  const lifetime = SIGNAL_LIFETIME_MS.intraday;
+  assert.equal(recorded.expiresAt, lifetime === null ? 0 : now + lifetime);
 
-  // A whole week later, with price standing still between the two levels: a
-  // deadline would have settled this, and nothing else may.
-  const flat = { ...bars(1).at(-1)!, open: recorded.entry, close: recorded.entry,
-    high: recorded.entry, low: recorded.entry };
+  // Price standing still between the two levels, a week on. A signal with a
+  // deadline is settled at market; one without keeps running.
+  // Stamped after the signal, or it is not a candle the signal can be judged on.
+  const flat = { ...bars(1).at(-1)!, time: now + 1000, closeTime: now + 2000,
+    open: recorded.entry, close: recorded.entry, high: recorded.entry, low: recorded.entry };
   resolveOpenSignals('BRENT', 'intraday', [flat], now + 7 * 86_400_000, undefined);
-  const still = database.connection()
+  const settled = database.connection()
     .prepare('SELECT status FROM signals WHERE id = ?').get(recorded.id) as { status: string };
-  assert.equal(still.status, 'OPEN');
+  assert.equal(settled.status, lifetime === null ? 'OPEN' : 'EXPIRED');
+
+  const openEnded = recordSignal({ ...candidate, instrumentId: 'BRENT', updatedAt: now + 1 })!;
+  database.connection().prepare('UPDATE signals SET expires_at = 0 WHERE id = ?').run(openEnded.id);
+  resolveOpenSignals('BRENT', 'intraday', [flat], now + 7 * 86_400_000, undefined);
+  const running = database.connection()
+    .prepare('SELECT status FROM signals WHERE id = ?').get(openEnded.id) as { status: string };
+  assert.equal(running.status, 'OPEN');
 });
 
 test('one position per market: the other horizon is held off', async () => {
