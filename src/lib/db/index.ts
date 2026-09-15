@@ -371,6 +371,21 @@ export interface SignalStats {
   profitable: number;
   /** How many are running right now. */
   open: number;
+  /**
+   * The sum of every settled result, in units of risk.
+   *
+   * This is the only number on the page that says whether the record made money
+   * or lost it. A count of signals that "ended above water" does not: four
+   * small gains beside four full stops is a losing record that reads as an even
+   * one, which is exactly how the first eight signals here looked.
+   */
+  totalR: number;
+  /** Total over settled signals — what one signal is worth on average. */
+  expectancy: number;
+  /** How each settled signal actually ended. */
+  wins: number;
+  losses: number;
+  expired: number;
 }
 
 /**
@@ -381,11 +396,18 @@ export interface SignalStats {
  */
 export function signalStats(scope?: SignalScope): SignalStats {
   const rows = recentSignals(ALL_ROWS, scope);
+  const settled = rows.filter((row) => row.resultR !== null);
+  const totalR = settled.reduce((sum, row) => sum + (row.resultR ?? 0), 0);
 
   return {
     total: rows.length,
-    profitable: rows.filter((row) => row.resultR !== null && row.resultR > 0).length,
+    profitable: settled.filter((row) => (row.resultR ?? 0) > 0).length,
     open: rows.filter((row) => row.status === 'OPEN').length,
+    totalR: Number(totalR.toFixed(2)),
+    expectancy: settled.length > 0 ? Number((totalR / settled.length).toFixed(3)) : 0,
+    wins: rows.filter((row) => row.status === 'WIN').length,
+    losses: rows.filter((row) => row.status === 'LOSS').length,
+    expired: rows.filter((row) => row.status === 'EXPIRED').length,
   };
 }
 

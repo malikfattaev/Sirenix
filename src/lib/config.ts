@@ -90,6 +90,26 @@ export const INSTRUMENTS: InstrumentConfig[] = [
       match: ['oil', 'brent', 'crude', 'wti', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
     },
   },
+  {
+    /**
+     * The one market the live engine was measured not to lose on.
+     *
+     * Over 21 days of one-minute candles it took 51 trades at 2.4 a day for
+     * +4.5R in the first half and level in the second, which is the only result
+     * in the whole candidate screen that is not negative in both halves — gold
+     * returned -7.0R there and Brent -8.0R. It also carries the cheapest spread
+     * of the seventy-odd markets quoted here, 0.34 of a one-minute ATR against
+     * gold's 0.56, and the cost of the round trip is the one term in this
+     * business that is known in advance.
+     *
+     * No headline feed: the index has no single story the way gold and oil do,
+     * and a feed matched on "stocks" would score every market at once.
+     */
+    id: 'US30',
+    epic: 'US30',
+    label: 'US 30',
+    horizons: ['scalp'],
+  },
 ];
 
 /**
