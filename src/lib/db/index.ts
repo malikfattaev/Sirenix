@@ -46,7 +46,10 @@ export interface SignalRecord {
   /** Realised result in units of risk, once the signal has resolved. */
   resultR: number | null;
   createdAt: number;
-  /** When the signal is settled at market if neither level is reached. */
+  /**
+   * When the signal is settled at market if neither level is reached, or
+   * `NO_DEADLINE` when it is followed until one of them is.
+   */
   expiresAt: number;
   closedAt: number | null;
 }
@@ -118,6 +121,20 @@ function db(): Database.Database {
 /** The horizons the app still runs, and so can still judge a signal on. */
 const LIVE_HORIZONS = Object.keys(HORIZON_LABEL) as Horizon[];
 
+/**
+ * `expires_at` for a signal that is followed until it reaches a level.
+ *
+ * Zero is the column's own default, so a row written by any build that predates
+ * the deadline reads as having none, which is exactly what it had.
+ */
+const NO_DEADLINE = 0;
+
+/** When this signal is settled at market, or `NO_DEADLINE` if it never is. */
+function deadlineFor(horizon: Horizon, issuedAt: number): number {
+  const lifetime = SIGNAL_LIFETIME_MS[horizon];
+  return lifetime === null ? NO_DEADLINE : issuedAt + lifetime;
+}
+
 type SignalScope = Pick<Settings, 'markets' | 'horizons'>;
 
 function trackedSignalPairs(scope?: SignalScope): [string, Horizon][] {
@@ -146,17 +163,18 @@ function migrate(connection: Database.Database) {
     connection.exec('ALTER TABLE signals ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0');
   }
 
-  // Rows written before the deadline was stored per signal: give each the one
-  // its horizon runs under.
-  const undated = connection
-    .prepare(
-      `SELECT id, horizon, created_at FROM signals
-        WHERE expires_at = 0 AND horizon IN (${LIVE_HORIZONS.map(() => '?').join(', ')})`,
-    )
-    .all(...LIVE_HORIZONS) as { id: number; horizon: Horizon; created_at: number }[];
-  const setExpiry = connection.prepare('UPDATE signals SET expires_at = ? WHERE id = ?');
-  for (const row of undated) {
-    setExpiry.run(row.created_at + SIGNAL_LIFETIME_MS[row.horizon], row.id);
+  // Horizons that no longer run on a deadline release the signals still open
+  // under one, so the rule on the board and the rule in the record are the same
+  // rule. Settled rows keep the terms they were actually judged on.
+  const undeadlined = LIVE_HORIZONS.filter((horizon) => SIGNAL_LIFETIME_MS[horizon] === null);
+  if (undeadlined.length > 0) {
+    connection
+      .prepare(
+        `UPDATE signals SET expires_at = ${NO_DEADLINE}
+          WHERE status = 'OPEN' AND expires_at != ${NO_DEADLINE}
+            AND horizon IN (${undeadlined.map(() => '?').join(', ')})`,
+      )
+      .run(...undeadlined);
   }
 
   // A signal the app can no longer judge is cancelled rather than left open
@@ -201,28 +219,25 @@ const toRecord = (row: Row): SignalRecord => ({
 /**
  * Stores a live signal, unless one is already running on that market.
  *
- * A market carries one signal per horizon at a time, the way a position does.
- * While one is open it stands, whichever strategy proposes it and however many
- * polls repeat it; a second entry alongside it would be the same trade counted
- * twice. Nothing opposite can arrive here at all: `withPosition` keeps the board
- * on the open signal until it reaches its stop, its target or its deadline.
+ * A market carries one signal at a time, the way a position does. While one is
+ * open it stands, whichever strategy proposes it and however many polls repeat
+ * it; a second entry alongside it would be the same trade counted twice.
+ * Nothing opposite can arrive here at all: `withPosition` keeps the board on the
+ * open signal until price reaches its stop or its target.
  */
 export function recordSignal(signal: Signal): SignalRecord | null {
   if (signal.type === 'WAIT' || !signal.plan || !signal.strategy) return null;
 
+  // A signal that is still open is still this market's trade, however long ago
+  // it was issued: re-publishing it on the next sweep must find it rather than
+  // file a second copy of the same idea.
   const existing = db()
     .prepare(
       `SELECT * FROM signals
         WHERE instrument_id = ? AND horizon = ? AND direction = ? AND status = 'OPEN'
-          AND created_at > ?
         ORDER BY created_at DESC LIMIT 1`,
     )
-    .get(
-      signal.instrumentId,
-      signal.horizon,
-      signal.type,
-      signal.updatedAt - SIGNAL_LIFETIME_MS[signal.horizon],
-    ) as Row | undefined;
+    .get(signal.instrumentId, signal.horizon, signal.type) as Row | undefined;
   if (existing) return toRecord(existing);
 
   const { plan } = signal;
@@ -251,7 +266,7 @@ export function recordSignal(signal: Signal): SignalRecord | null {
       plan.riskReward,
       signal.decimals,
       signal.updatedAt,
-      signal.updatedAt + SIGNAL_LIFETIME_MS[signal.horizon],
+      deadlineFor(signal.horizon, signal.updatedAt),
     );
 
   return toRecord(
@@ -326,7 +341,9 @@ export function resolveOpenSignals(
       }
     }
 
-    if (!outcome && now > row.expires_at) {
+    // A signal with no deadline is not settled by the clock at all: it keeps
+    // running until one of its own two levels is reached.
+    if (!outcome && row.expires_at !== NO_DEADLINE && now > row.expires_at) {
       const last = since[since.length - 1];
       const price = quote && quote.bid !== null && quote.ask !== null
         ? (isLong ? quote.bid : quote.ask)
@@ -432,7 +449,7 @@ function tradedExit(candle: Candle, isLong: boolean) {
 /** SQLite reads a negative LIMIT as no limit at all. */
 const ALL_ROWS = -1;
 
-/** The signal currently running on a market, if there is one. */
+/** The signal currently running on a market's horizon, if there is one. */
 export function openSignal(instrumentId: string, horizon: Horizon): SignalRecord | null {
   const row = db()
     .prepare(
@@ -440,6 +457,25 @@ export function openSignal(instrumentId: string, horizon: Horizon): SignalRecord
         ORDER BY created_at DESC LIMIT 1`,
     )
     .get(instrumentId, horizon) as Row | undefined;
+  return row ? toRecord(row) : null;
+}
+
+/**
+ * Any signal running on a market, whichever horizon issued it.
+ *
+ * A market is one market. Gold on the minute scale and gold on the quarter-hour
+ * scale are two engines here and one instrument out there, so letting each hold
+ * its own position means the board can publish a buy and a sell on the same
+ * metal at the same time — which is not two trades, it is one trade against
+ * itself, paying the spread twice for the privilege.
+ */
+export function openSignalOnMarket(instrumentId: string): SignalRecord | null {
+  const row = db()
+    .prepare(
+      `SELECT * FROM signals WHERE instrument_id = ? AND status = 'OPEN'
+        ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get(instrumentId) as Row | undefined;
   return row ? toRecord(row) : null;
 }
 

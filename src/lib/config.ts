@@ -456,10 +456,21 @@ export const POSITION: {
   },
 };
 
-/** How long a signal stays open before it is settled at market. */
-export const SIGNAL_LIFETIME_MS: Record<Horizon, number> = {
-  scalp: 30 * 60_000,
-  intraday: INTRADAY.holdBars * TIMEFRAME_MS.MINUTE_15,
+/**
+ * How long a signal is followed before it is settled at whatever the market
+ * happens to be, per horizon. `null` means it is not settled that way at all:
+ * the trade runs until price reaches its stop or its target.
+ *
+ * Those two are the outcomes the plan is built around, and a deadline is a
+ * third one that nobody asked for. It was not a small effect: across the first
+ * eight signals the record produced three stops, five deadlines and **not one
+ * target**, so the clock was not a safety net underneath the plan, it was the
+ * plan's usual ending — and a trade cut at an arbitrary minute is neither the
+ * win nor the loss the entry was reasoned about.
+ */
+export const SIGNAL_LIFETIME_MS: Record<Horizon, number | null> = {
+  scalp: null,
+  intraday: null,
 };
 
 /**

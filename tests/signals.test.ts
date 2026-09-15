@@ -142,3 +142,35 @@ test('cooldown journal preserves the rejected direction, score and plan', async 
   journal.recordSkip(rejected);
   assert.equal(journal.recentSkips(1)[0].signal.rejections![0].score, candidate.score);
 });
+
+test('a signal carries no deadline and is never settled by the clock', async () => {
+  const { recordSignal, resolveOpenSignals } = await import('@/lib/db');
+  const candidate = analyseIntraday(gold, bars(1), quote(2158), now);
+  const recorded = recordSignal({ ...candidate, instrumentId: 'BRENT' })!;
+  assert.equal(recorded.expiresAt, 0);
+
+  // A whole week later, with price standing still between the two levels: a
+  // deadline would have settled this, and nothing else may.
+  const flat = { ...bars(1).at(-1)!, open: recorded.entry, close: recorded.entry,
+    high: recorded.entry, low: recorded.entry };
+  resolveOpenSignals('BRENT', 'intraday', [flat], now + 7 * 86_400_000, undefined);
+  const still = database.connection()
+    .prepare('SELECT status FROM signals WHERE id = ?').get(recorded.id) as { status: string };
+  assert.equal(still.status, 'OPEN');
+});
+
+test('one position per market: the other horizon is held off', async () => {
+  const { openSignalOnMarket } = await import('@/lib/db');
+  const { withPosition } = await import('@/lib/position');
+  // BRENT is holding the intraday signal opened by the test above.
+  assert.equal(openSignalOnMarket('BRENT')!.horizon, 'intraday');
+
+  const scalp = { ...analyseIntraday(gold, bars(1), quote(2158), now), instrumentId: 'BRENT',
+    horizon: 'scalp' as const, updatedAt: now + 60_000 };
+  const held = withPosition(scalp);
+  assert.equal(held.type, 'WAIT');
+  assert.equal(held.plan, null);
+  assert.equal(held.rejections![0].code, 'market_busy');
+  // The same horizon still re-states its own signal rather than standing aside.
+  assert.equal(withPosition({ ...scalp, horizon: 'intraday' }).type, 'LONG');
+});

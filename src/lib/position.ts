@@ -1,5 +1,11 @@
-import { POSITION, STRATEGY_NAME, type StrategyKey } from '@/lib/config';
-import { lastLoss, lossStreak, openSignal, type SignalRecord } from '@/lib/db';
+import { HORIZON_LABEL, POSITION, STRATEGY_NAME, type StrategyKey } from '@/lib/config';
+import {
+  lastLoss,
+  lossStreak,
+  openSignal,
+  openSignalOnMarket,
+  type SignalRecord,
+} from '@/lib/db';
 import { lossCooldownMs, maxLossStreak } from '@/lib/settings';
 import { STANDING_ASIDE } from '@/lib/strategy';
 import type { Signal } from '@/lib/strategy/types';
@@ -25,12 +31,29 @@ const hours = (ms: number) => {
  * So while a signal is open its market shows that signal and nothing else, and
  * after a losing one the market is left alone for a while before it is offered
  * again.
+ *
+ * "Its market" means the instrument, not the horizon. The two engines read the
+ * same gold at different resolutions, and out there it is one price: a buy from
+ * one and a sell from the other are not a hedge, they are the same money
+ * arguing with itself across two spreads.
  */
 export function withPosition(signal: Signal): Signal {
   const open = openSignal(signal.instrumentId, signal.horizon);
   if (open) return running(signal, open);
 
   if (signal.type === 'WAIT') return signal;
+
+  const elsewhere = openSignalOnMarket(signal.instrumentId);
+  if (elsewhere) {
+    return standAside(
+      signal,
+      `по этому рынку уже идёт сигнал (${HORIZON_LABEL[elsewhere.horizon]}, ${
+        elsewhere.direction === 'LONG' ? 'покупка' : 'продажа'
+      })`,
+      'One position per market: the other horizon is already in this instrument',
+      'market_busy',
+    );
+  }
 
   // A run of losses is either the market having changed character or the read
   // being wrong about it. Neither is fixed by taking the next trade straight
@@ -87,7 +110,6 @@ function progressNote(open: SignalRecord, price: number, now: number): string {
   const s = open.direction === 'LONG' ? 1 : -1;
   const risk = Math.abs(open.entry - open.stopLoss);
   const moved = risk > 0 ? (s * (price - open.entry)) / risk : 0;
-  const left = minutes(open.expiresAt - now);
 
   const gone = moved >= LATE_AFTER_R;
   const against = moved <= -LATE_AFTER_R;
@@ -97,7 +119,7 @@ function progressNote(open: SignalRecord, price: number, now: number): string {
       ? 'цена ушла против входа, входить поздно'
       : 'вход ещё в силе';
 
-  return `Сигнал идёт ${minutes(now - open.createdAt)} мин, до закрытия ${left} мин. Цена на ${moved >= 0 ? '+' : ''}${moved.toFixed(2)}R от входа: ${state}.`;
+  return `Сигнал идёт ${hours(now - open.createdAt)}, держится до стопа или цели. Цена на ${moved >= 0 ? '+' : ''}${moved.toFixed(2)}R от входа: ${state}.`;
 }
 
 /**
@@ -127,7 +149,7 @@ function running(signal: Signal, open: SignalRecord): Signal {
       stopReason: 'The level that says this read was wrong',
       targetReason: 'The level the move was taken for',
     },
-    reasons: [`Already running, ${minutes(open.expiresAt - signal.updatedAt)} min left on it`],
+    reasons: ['Already running, held until it reaches its stop or its target'],
     blockedBy: null,
     note: progressNote(open, signal.price, signal.updatedAt),
   };
