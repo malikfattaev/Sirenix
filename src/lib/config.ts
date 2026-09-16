@@ -69,47 +69,53 @@ export interface InstrumentConfig {
   horizons?: Horizon[];
 }
 
+/**
+ * The board: the eight indices that produce enough signals to be judged.
+ *
+ * Gold and Brent were taken off at the owner's request after the six-week
+ * screen. Brent was the worst market measured anywhere on the field, -17.3R
+ * over 31 signals with a 19% win rate; gold returned -3.2R and, unlike the
+ * indices, was positive in the first half and negative in the second, which is
+ * the shape of noise rather than of a market that suits the engine.
+ *
+ * What replaced them is every index Capital quotes that fires often enough to
+ * be read at all. Twenty-six markets were screened over forty-one days of
+ * one-minute candles; ten produced fewer than twenty signals in six weeks and
+ * are not here, because a market that trades four times can post any number.
+ *
+ * **None of the eight is profitable, and the order below is by cost, not by
+ * result.** Over the same six weeks the engine returned between +0.5R and
+ * -10.1R on them, and the reason is not the board: `direction.ts` followed all
+ * 453 signals with the stop and the target removed and found them right 47% of
+ * the time at twenty minutes, 49% at an hour and 45% at two hours. Every setup
+ * measured alone loses on both halves as well. Until an entry with a measured
+ * edge exists, adding a market adds signals and adds losses, and the honest
+ * reason to run these eight is that they are the cheapest and busiest place to
+ * collect live evidence, not that they pay.
+ *
+ * The figure on each line is the round trip as a share of a fifteen-minute ATR,
+ * from `tradingHours.ts` — the one number here known in advance of any trade.
+ *
+ * No headline feeds: an index has no single story the way gold and oil do, and
+ * a feed matched on "stocks" would score every market at once.
+ */
 export const INSTRUMENTS: InstrumentConfig[] = [
-  {
-    id: 'GOLD',
-    epic: 'GOLD',
-    label: 'GOLD',
-    horizons: ['scalp'],
-    news: {
-      feeds: ['investing-commodities', 'investing-commodity-news', 'fxstreet', 'marketwatch'],
-      match: ['gold', 'bullion', 'xau', 'precious metal', 'safe haven', 'safe-haven'],
-    },
-  },
-  {
-    id: 'BRENT',
-    epic: 'OIL_BRENT',
-    label: 'BRENT OIL',
-    horizons: ['scalp'],
-    news: {
-      feeds: ['oilprice', 'investing-commodities', 'investing-commodity-news', 'cnbc-energy', 'fxstreet'],
-      match: ['oil', 'brent', 'crude', 'wti', 'opec', 'petroleum', 'refinery', 'refiner', 'barrel'],
-    },
-  },
-  {
-    /**
-     * The one market the live engine was measured not to lose on.
-     *
-     * Over 21 days of one-minute candles it took 51 trades at 2.4 a day for
-     * +4.5R in the first half and level in the second, which is the only result
-     * in the whole candidate screen that is not negative in both halves — gold
-     * returned -7.0R there and Brent -8.0R. It also carries the cheapest spread
-     * of the seventy-odd markets quoted here, 0.34 of a one-minute ATR against
-     * gold's 0.56, and the cost of the round trip is the one term in this
-     * business that is known in advance.
-     *
-     * No headline feed: the index has no single story the way gold and oil do,
-     * and a feed matched on "stocks" would score every market at once.
-     */
-    id: 'US30',
-    epic: 'US30',
-    label: 'US 30',
-    horizons: ['scalp'],
-  },
+  /** 0.035-0.048. The cheapest quote on the board. -9.3R over 83 signals. */
+  { id: 'US30', epic: 'US30', label: 'US 30', horizons: ['scalp'] },
+  /** 0.038-0.049. The least bad of the eight, +0.5R over 80 signals, which is zero. */
+  { id: 'US100', epic: 'US100', label: 'US TECH 100', horizons: ['scalp'] },
+  /** 0.043-0.070 in session. -2.9R over 34 signals. */
+  { id: 'DE40', epic: 'DE40', label: 'GERMANY 40', horizons: ['scalp'] },
+  /** 0.050-0.093. -2.9R over 30 signals. */
+  { id: 'US500', epic: 'US500', label: 'US 500', horizons: ['scalp'] },
+  /** 0.071-0.077, flat around the clock. -0.7R over 47 signals. */
+  { id: 'J225', epic: 'J225', label: 'JAPAN 225', horizons: ['scalp'] },
+  /** 0.071 in session but 0.50 overnight; the spread gate refuses it then. -5.7R. */
+  { id: 'FR40', epic: 'FR40', label: 'FRANCE 40', horizons: ['scalp'] },
+  /** 0.085 in session, 0.32 overnight. -6.3R over 17 signals, the thinnest here. */
+  { id: 'UK100', epic: 'UK100', label: 'UK 100', horizons: ['scalp'] },
+  /** 0.188-0.204, the dearest quote kept. -10.1R over 59 signals. */
+  { id: 'NL25', epic: 'NL25', label: 'NETHERLANDS 25', horizons: ['scalp'] },
 ];
 
 /**
@@ -122,6 +128,15 @@ export interface NewsFeedConfig {
   url: string;
 }
 
+/**
+ * No market on the board subscribes to any of these at the moment.
+ *
+ * They are commodity and energy wires, and they were read by gold and Brent
+ * until both came off the board. An index has no single story the way a barrel
+ * of oil does — a feed matched on "stocks" would score all eight at once and
+ * tell none of them apart — so nothing here is fetched until a market with a
+ * story of its own comes back.
+ */
 export const NEWS_FEEDS: NewsFeedConfig[] = [
   { id: 'investing-commodities', label: 'Investing.com', url: 'https://www.investing.com/rss/commodities.rss' },
   { id: 'investing-commodity-news', label: 'Investing.com', url: 'https://www.investing.com/rss/news_11.rss' },
@@ -348,12 +363,21 @@ export const DEFAULT_TUNING: StrategyTuning = {
   maxStopAtr: 2.6,
   maxChaseAtr: 1.8,
   /**
-   * Six, measured. Swept over 3, 4, 5, 6, 8 and 10 on 21 days of one-minute
-   * candles, split in half: on US 30 — the only market on the board that pays —
-   * three returns +4.5R then level, and six returns +6.2R then +0.6R, positive
-   * on both halves with twelve fewer trades. Brent improves as well, from -9.6R
-   * to -8.3R. Gold is level either way at about -6R, which is a statement about
-   * gold rather than about this number.
+   * Six, measured — but measured against a smaller claim than it first carried.
+   *
+   * Swept over 3, 4, 5, 6, 8 and 10 on 21 days of one-minute candles, six came
+   * out best on US 30 at +6.8R against three's +4.5R, and that was written down
+   * here as the gate having found the one market that pays. It had not. The
+   * same screen re-run over forty-one days puts US 30 at -9.3R: those three
+   * weeks were the good half of a six-week sample, and reading them alone is
+   * the error this repository exists to avoid.
+   *
+   * What survives is narrower and still worth having. Trades whose round trip
+   * exceeds a quarter of their risk returned -1.016R in the opening-range study
+   * against -0.047R for those paying under a tenth, a difference of twenty
+   * times, and three is the setting that allows the spread to be a third of the
+   * stop. Six does not make the engine profitable. It stops it paying a toll
+   * larger than the road on trades that were never going to cover it.
    */
   minRiskToSpread: 6,
   minRewardToSpread: 5,
@@ -471,11 +495,22 @@ export interface IntradayTuning {
   scoreCeiling: number;
 }
 
-// Separate profiles; keep the baseline until an independent sample supports a change.
-export const INTRADAY_BY_MARKET: Record<string, IntradayTuning> = {
-  GOLD: { ...INTRADAY },
-  BRENT: { ...INTRADAY },
-};
+/**
+ * One profile per market on the board, each its own object.
+ *
+ * Every one of them starts as a copy of the baseline and stays there until an
+ * independent sample supports moving it. They are separate copies rather than
+ * one shared object so that changing a market's settings changes that market
+ * and not the whole board — which is the only reason this map exists.
+ *
+ * Built from `INSTRUMENTS` rather than listed, so a market added to the board
+ * cannot arrive without a profile, and one taken off cannot leave a profile
+ * behind that nothing reads. It used to name gold and Brent, both of which have
+ * since come off.
+ */
+export const INTRADAY_BY_MARKET: Record<string, IntradayTuning> = Object.fromEntries(
+  INSTRUMENTS.map((instrument) => [instrument.id, { ...INTRADAY }]),
+);
 
 export function intradayTuning(instrumentId: string): IntradayTuning {
   return INTRADAY_BY_MARKET[instrumentId] ?? INTRADAY;

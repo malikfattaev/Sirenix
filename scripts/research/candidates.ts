@@ -14,48 +14,15 @@
  *
  * Usage: npx tsx --env-file-if-exists=.env.local scripts/research/candidates.ts [days]
  */
-import type { InstrumentConfig } from '@/lib/config';
 import { replay, type BacktestResult } from '@/lib/backtest/engine';
 import { loadHistory } from '../lib/data';
+import { CANDIDATE_MARKETS } from '../lib/universe';
 
 const days = Number(process.argv[2] ?? 41);
 
 /** Both halves must trade at least this often before the result means anything. */
 const MIN_SIGNALS_PER_HALF = 8;
 
-/**
- * Every index Capital quotes, plus the commodities and crosses that have been
- * on the board or near it, so the comparison is against the whole field rather
- * than against the markets that happen to be running now.
- */
-const CANDIDATES: InstrumentConfig[] = [
-  { id: 'US30', epic: 'US30', label: 'US 30' },
-  { id: 'US500', epic: 'US500', label: 'US 500' },
-  { id: 'US100', epic: 'US100', label: 'US TECH 100' },
-  { id: 'RTY', epic: 'RTY', label: 'US 2000' },
-  { id: 'DE40', epic: 'DE40', label: 'GERMANY 40' },
-  { id: 'UK100', epic: 'UK100', label: 'UK 100' },
-  { id: 'FR40', epic: 'FR40', label: 'FRANCE 40' },
-  { id: 'NL25', epic: 'NL25', label: 'NETHERLANDS 25' },
-  { id: 'SP35', epic: 'SP35', label: 'SPAIN 35' },
-  { id: 'SW20', epic: 'SW20', label: 'SWITZERLAND 20' },
-  { id: 'J225', epic: 'J225', label: 'JAPAN 225' },
-  { id: 'AU200', epic: 'AU200', label: 'AUSTRALIA 200' },
-  { id: 'HK50', epic: 'HK50', label: 'HONG KONG 50' },
-  { id: 'HSTECH', epic: 'HSTECH', label: 'HS TECH' },
-  { id: 'HSCE', epic: 'HSCE', label: 'CHINA H-SHARES' },
-  { id: 'CN50', epic: 'CN50', label: 'CHINA 50' },
-  { id: 'GOLD', epic: 'GOLD', label: 'GOLD' },
-  { id: 'SILVER', epic: 'SILVER', label: 'SILVER' },
-  { id: 'COPPER', epic: 'COPPER', label: 'COPPER' },
-  { id: 'BRENT', epic: 'OIL_BRENT', label: 'BRENT OIL' },
-  { id: 'WTI', epic: 'OIL_CRUDE', label: 'WTI CRUDE' },
-  { id: 'NATURALGAS', epic: 'NATURALGAS', label: 'NATURAL GAS' },
-  { id: 'USDJPY', epic: 'USDJPY', label: 'USD/JPY' },
-  { id: 'AUDJPY', epic: 'AUDJPY', label: 'AUD/JPY' },
-  { id: 'GBPJPY', epic: 'GBPJPY', label: 'GBP/JPY' },
-  { id: 'EURUSD', epic: 'EURUSD', label: 'EUR/USD' },
-];
 
 const signed = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(1)}R`;
 
@@ -78,7 +45,7 @@ async function main() {
 
   const rows: Row[] = [];
 
-  for (const instrument of CANDIDATES) {
+  for (const instrument of CANDIDATE_MARKETS) {
     try {
       const data = await loadHistory(instrument, days);
       const whole = replay(instrument, data, { days });

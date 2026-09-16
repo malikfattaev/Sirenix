@@ -1,35 +1,34 @@
 /**
- * Where the stop and the target belong, given that the entries are not the problem.
+ * Can any placement of the stop and the target rescue a coin flip?
  *
- * `anatomy.ts` priced the three ways a trade can end, over 332 of them on six
- * markets and six weeks. Nineteen percent reached the target and paid 1.83R.
- * Fifty-four percent were stopped and paid -1R. The remaining twenty-seven
- * percent ran out of time and were closed at market for **+0.357R each** —
- * which is the whole reason this sweep exists. A position closed by the clock
- * has no thesis behind its exit price; if that bucket is reliably positive, the
- * entries are pointing the right way and the money is being lost between the
- * entry and the target, not at it.
+ * `anatomy.ts` priced the three ways a trade can end, over 332 of them: 19%
+ * reached the target and paid 1.83R, 54% were stopped and paid -1R, and the
+ * remaining 27% ran out of time and were closed at market for +0.357R each.
+ * That last bucket looked for a moment like evidence the entries point the
+ * right way and only the geometry is wrong.
  *
- * Three things decide what happens in between, and this sweeps all three:
+ * It is not. A trade reaches the clock precisely by not having hit its stop,
+ * and "did not fall" is most of the way to "rose", so the bucket is positive by
+ * construction. `direction.ts` removed both barriers and followed every signal
+ * for a fixed number of minutes instead: 47% right at twenty minutes, 49% at
+ * sixty, 45% at two hours. There is no edge under the geometry.
  *
- *  - how far the stop sits beyond the level that invalidates the setup,
- *  - how far the first target is allowed to be,
- *  - and how long the position is given before the clock takes it.
+ * This sweep is therefore not a search but the end of the argument. Three
+ * things decide what happens between the entry and the exit — how far the stop
+ * sits beyond the invalidation level, how far the target may be, and how long
+ * the position is given — and they are swept together because they interact: a
+ * wider stop is a worse reward-to-risk and has to earn it back with a higher
+ * hit rate, and a longer hold only helps if the stop survives the extra time.
  *
- * The three interact, which is why they are swept together rather than one at a
- * time: a wider stop with the same target is a worse reward-to-risk and has to
- * earn it back with a higher hit rate, and a longer hold only helps if the stop
- * is far enough away to survive the extra time.
- *
- * Both halves of the sample have to pay, and both have to have traded enough to
- * be read. Everything here is measured on the same six weeks, so a row that
- * survives is a candidate to test on new data, not a finding.
+ * If a row here comes out positive on both halves it is a configuration fitted
+ * to six weeks, not a finding, because nothing underneath it predicts anything.
  *
  * Usage: npx tsx --env-file-if-exists=.env.local scripts/research/geometry.ts [days]
  */
-import { DEFAULT_TUNING, type InstrumentConfig } from '@/lib/config';
+import { DEFAULT_TUNING } from '@/lib/config';
 import { replay, type BacktestData, type BacktestResult } from '@/lib/backtest/engine';
 import { loadHistory } from '../lib/data';
+import { ACTIVE_MARKETS } from '../lib/universe';
 
 const days = Number(process.argv[2] ?? 41);
 
@@ -42,14 +41,6 @@ const TARGET_CEILING = [1.0, 1.8, 3.0];
 /** Minutes before the clock closes the position at market. */
 const HOLD = [20, 60, 120];
 
-const MARKETS: InstrumentConfig[] = [
-  { id: 'US30', epic: 'US30', label: 'US 30' },
-  { id: 'US100', epic: 'US100', label: 'US TECH 100' },
-  { id: 'NL25', epic: 'NL25', label: 'NETHERLANDS 25' },
-  { id: 'FR40', epic: 'FR40', label: 'FRANCE 40' },
-  { id: 'DE40', epic: 'DE40', label: 'GERMANY 40' },
-  { id: 'US500', epic: 'US500', label: 'US 500' },
-];
 
 /** Both halves must trade this often before a row is worth reading. */
 const MIN_PER_HALF = 10;
@@ -70,7 +61,7 @@ const add = (a: Cell, b: BacktestResult): Cell => ({
 
 async function main() {
   const data = new Map<string, BacktestData>();
-  for (const instrument of MARKETS) {
+  for (const instrument of ACTIVE_MARKETS) {
     try {
       data.set(instrument.id, await loadHistory(instrument, days));
     } catch (error) {
@@ -99,7 +90,7 @@ async function main() {
         let second: Cell = { signals: 0, totalR: 0, winRate: 0 };
         let wins = 0;
 
-        for (const instrument of MARKETS) {
+        for (const instrument of ACTIVE_MARKETS) {
           const loaded = data.get(instrument.id);
           if (!loaded) continue;
           const all = replay(instrument, loaded, { days, tuning });

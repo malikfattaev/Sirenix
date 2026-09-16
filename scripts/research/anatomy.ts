@@ -16,22 +16,14 @@
  *
  * Usage: npx tsx --env-file-if-exists=.env.local scripts/research/anatomy.ts [days]
  */
-import { DEFAULT_TUNING, type InstrumentConfig } from '@/lib/config';
+import { DEFAULT_TUNING } from '@/lib/config';
 import { replay, type BacktestTrade } from '@/lib/backtest/engine';
 import { loadHistory } from '../lib/data';
+import { ACTIVE_MARKETS } from '../lib/universe';
 import { mean } from '../lib/stats';
 
 const days = Number(process.argv[2] ?? 41);
 
-/** The markets the screen found worth reading — enough signals to say anything. */
-const MARKETS: InstrumentConfig[] = [
-  { id: 'US30', epic: 'US30', label: 'US 30' },
-  { id: 'US100', epic: 'US100', label: 'US TECH 100' },
-  { id: 'NL25', epic: 'NL25', label: 'NETHERLANDS 25' },
-  { id: 'FR40', epic: 'FR40', label: 'FRANCE 40' },
-  { id: 'DE40', epic: 'DE40', label: 'GERMANY 40' },
-  { id: 'US500', epic: 'US500', label: 'US 500' },
-];
 
 function part(trades: BacktestTrade[], outcome: BacktestTrade['outcome']) {
   const here = trades.filter((trade) => trade.outcome === outcome);
@@ -55,7 +47,7 @@ async function main() {
 
   const pooled: BacktestTrade[] = [];
 
-  for (const instrument of MARKETS) {
+  for (const instrument of ACTIVE_MARKETS) {
     try {
       const data = await loadHistory(instrument, days);
       const result = replay(instrument, data, { days, tuning: DEFAULT_TUNING });

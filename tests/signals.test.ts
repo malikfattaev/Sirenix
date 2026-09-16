@@ -9,7 +9,10 @@ import { candleExit } from '@/lib/intraday/replay';
 import type { Candle } from '@/lib/market/candles';
 import type { Quote } from '@/lib/quotes';
 
-const gold = INSTRUMENTS[0];
+/** Whatever is first on the board: these tests are about the engine, not the market. */
+const market = INSTRUMENTS[0];
+/** A second, different market, for the tests that need two. */
+const other = INSTRUMENTS[1];
 const now = 1_800_000_000_000;
 function bars(side: number): Candle[] {
   return Array.from({ length: 80 }, (_, i) => {
@@ -19,7 +22,7 @@ function bars(side: number): Candle[] {
   });
 }
 function quote(price: number): Quote {
-  return { instrumentId: gold.id, price, bid: price - 1, ask: price + 1, spread: 2,
+  return { instrumentId: market.id, price, bid: price - 1, ask: price + 1, spread: 2,
     decimals: 2, marketStatus: 'TRADEABLE', updatedAt: now, changePercent: 0,
     source: 'stream', open: true, stale: false, age: 0, opensAt: null, closesAt: null };
 }
@@ -28,7 +31,7 @@ for (const side of [1, -1]) {
   test(`intraday ${side === 1 ? 'LONG buys ask' : 'SHORT sells bid'} and anchors levels to fill`, () => {
     const candles = bars(side);
     const q = quote(candles.at(-1)!.close);
-    const signal = analyseIntraday(gold, candles, q, now);
+    const signal = analyseIntraday(market, candles, q, now);
     const atr = readIntraday(candles)!.atr;
     assert.equal(signal.type, side === 1 ? 'LONG' : 'SHORT');
     assert.equal(signal.price, q.price);
@@ -44,25 +47,25 @@ test('missing, crossed and nonfinite quotes cannot produce an entry', () => {
   const candles = bars(1);
   const q = quote(candles.at(-1)!.close);
   for (const invalid of [undefined, { ...q, ask: null }, { ...q, bid: NaN }, { ...q, bid: q.ask! + 1 }]) {
-    const signal = analyseIntraday(gold, candles, invalid, now);
+    const signal = analyseIntraday(market, candles, invalid, now);
     assert.equal(signal.type, 'WAIT');
     assert.equal(signal.plan, null);
   }
 });
 
 test('profiles are separate and analysis uses supplied instrument tuning', () => {
-  assert.notEqual(intradayTuning('GOLD'), intradayTuning('BRENT'));
+  assert.notEqual(intradayTuning(market.id), intradayTuning(other.id));
   const candles = bars(1);
   const q = quote(candles.at(-1)!.close);
-  const normal = analyseIntraday(gold, candles, q, now);
-  const strict = analyseIntraday(gold, candles, q, now, { ...intradayTuning('GOLD'), threshold: 100 });
+  const normal = analyseIntraday(market, candles, q, now);
+  const strict = analyseIntraday(market, candles, q, now, { ...intradayTuning(market.id), threshold: 100 });
   assert.equal(normal.type, 'LONG');
   assert.equal(strict.type, 'WAIT');
   assert.equal(strict.rejections![0].code, 'strength');
 });
 
 test('replay checks the exit side and charges the spread only once', () => {
-  const plan = analyseIntraday(gold, bars(1), quote(2158), now).plan!;
+  const plan = analyseIntraday(market, bars(1), quote(2158), now).plan!;
   const target = plan.takeProfit;
   const bar = { ...bars(1)[0], open: target - 2, low: target - 2, high: target + 0.5, close: target, spread: 2 };
   assert.equal(candleExit(plan, 'LONG', bar), null);
@@ -70,7 +73,7 @@ test('replay checks the exit side and charges the spread only once', () => {
   const both = { ...bar, low: plan.stopLoss, high: target + 1 };
   assert.equal(candleExit(plan, 'LONG', both)!.status, 'LOSS');
   assert.equal(candleExit(plan, 'LONG', { ...both, open: plan.stopLoss - 2 })!.price, plan.stopLoss - 3);
-  const shortPlan = analyseIntraday(gold, bars(-1), quote(1842), now).plan!;
+  const shortPlan = analyseIntraday(market, bars(-1), quote(1842), now).plan!;
   const shortBar = { ...bar, open: shortPlan.takeProfit + 2, high: shortPlan.takeProfit + 2, low: shortPlan.takeProfit - 0.5 };
   assert.equal(candleExit(shortPlan, 'SHORT', shortBar), null);
   assert.deepEqual(candleExit(shortPlan, 'SHORT', { ...shortBar, low: shortPlan.takeProfit - 1 }),
@@ -91,7 +94,7 @@ after(() => { database.connection().close(); rmSync(directory, { recursive: true
 // Runs before the other journal tests on purpose: pruning is on an hourly clock,
 // and the first write of the process is the one that pays for it.
 test('journal drops snapshots older than its retention window', () => {
-  const signal = analyseIntraday(gold, bars(1), quote(2158), now, { ...INTRADAY, threshold: 100 });
+  const signal = analyseIntraday(market, bars(1), quote(2158), now, { ...INTRADAY, threshold: 100 });
   const stale = Date.now() - 8 * 86_400_000;
   // A read creates the table without writing, so the stale row is in place
   // before the first write of the process triggers the prune.
@@ -100,9 +103,9 @@ test('journal drops snapshots older than its retention window', () => {
     .connection()
     .prepare(
       `INSERT INTO signal_skips (instrument_id, horizon, minute, code, created_at, snapshot)
-       VALUES ('GOLD', 'intraday', ?, 'stale', ?, '{}')`,
+       VALUES (?, 'intraday', ?, 'stale', ?, '{}')`,
     )
-    .run(Math.floor(stale / 60_000), stale);
+    .run(market.id, Math.floor(stale / 60_000), stale);
 
   journal.recordSkip(signal);
 
@@ -114,22 +117,22 @@ test('journal drops snapshots older than its retention window', () => {
 });
 
 test('journal persists WAIT snapshots, deduplicates polls and keeps markets/horizons separate', () => {
-  const signal = analyseIntraday(gold, bars(1), quote(2158), now, { ...INTRADAY, threshold: 100 });
+  const signal = analyseIntraday(market, bars(1), quote(2158), now, { ...INTRADAY, threshold: 100 });
   journal.recordSkip(signal);
   journal.recordSkip({ ...signal, updatedAt: now + 1000 });
-  journal.recordSkip({ ...signal, instrumentId: 'BRENT' });
+  journal.recordSkip({ ...signal, instrumentId: other.id });
   journal.recordSkip({ ...signal, horizon: 'scalp' });
   journal.recordSkip({ ...signal, updatedAt: now + 60_000 });
-  journal.recordSkip(analyseIntraday(gold, bars(1), quote(2158), now));
+  journal.recordSkip(analyseIntraday(market, bars(1), quote(2158), now));
   assert.equal(journal.recentSkips(100).length, 4);
-  assert.equal(journal.skipSummary(now).find((r) => r.instrumentId === 'GOLD' && r.horizon === 'intraday')!.samples, 2);
+  assert.equal(journal.skipSummary(now).find((r) => r.instrumentId === market.id && r.horizon === 'intraday')!.samples, 2);
   assert.equal(journal.recentSkips(1)[0].signal.bid, 2157);
 });
 
 test('cooldown journal preserves the rejected direction, score and plan', async () => {
   const { recordSignal } = await import('@/lib/db');
   const { withPosition } = await import('@/lib/position');
-  const candidate = analyseIntraday(gold, bars(1), quote(2158), now);
+  const candidate = analyseIntraday(market, bars(1), quote(2158), now);
   const recorded = recordSignal(candidate)!;
   database.connection().prepare("UPDATE signals SET status = 'LOSS', result_r = -1, closed_at = ? WHERE id = ?")
     .run(now, recorded.id);
@@ -146,8 +149,8 @@ test('cooldown journal preserves the rejected direction, score and plan', async 
 test('a signal is settled by its deadline, and only when it has one', async () => {
   const { recordSignal, resolveOpenSignals } = await import('@/lib/db');
   const { SIGNAL_LIFETIME_MS } = await import('@/lib/config');
-  const candidate = analyseIntraday(gold, bars(1), quote(2158), now);
-  const recorded = recordSignal({ ...candidate, instrumentId: 'BRENT' })!;
+  const candidate = analyseIntraday(market, bars(1), quote(2158), now);
+  const recorded = recordSignal({ ...candidate, instrumentId: other.id })!;
   const lifetime = SIGNAL_LIFETIME_MS.intraday;
   assert.equal(recorded.expiresAt, lifetime === null ? 0 : now + lifetime);
 
@@ -156,14 +159,14 @@ test('a signal is settled by its deadline, and only when it has one', async () =
   // Stamped after the signal, or it is not a candle the signal can be judged on.
   const flat = { ...bars(1).at(-1)!, time: now + 1000, closeTime: now + 2000,
     open: recorded.entry, close: recorded.entry, high: recorded.entry, low: recorded.entry };
-  resolveOpenSignals('BRENT', 'intraday', [flat], now + 7 * 86_400_000, undefined);
+  resolveOpenSignals(other.id, 'intraday', [flat], now + 7 * 86_400_000, undefined);
   const settled = database.connection()
     .prepare('SELECT status FROM signals WHERE id = ?').get(recorded.id) as { status: string };
   assert.equal(settled.status, lifetime === null ? 'OPEN' : 'EXPIRED');
 
-  const openEnded = recordSignal({ ...candidate, instrumentId: 'BRENT', updatedAt: now + 1 })!;
+  const openEnded = recordSignal({ ...candidate, instrumentId: other.id, updatedAt: now + 1 })!;
   database.connection().prepare('UPDATE signals SET expires_at = 0 WHERE id = ?').run(openEnded.id);
-  resolveOpenSignals('BRENT', 'intraday', [flat], now + 7 * 86_400_000, undefined);
+  resolveOpenSignals(other.id, 'intraday', [flat], now + 7 * 86_400_000, undefined);
   const running = database.connection()
     .prepare('SELECT status FROM signals WHERE id = ?').get(openEnded.id) as { status: string };
   assert.equal(running.status, 'OPEN');
@@ -172,10 +175,10 @@ test('a signal is settled by its deadline, and only when it has one', async () =
 test('one position per market: the other horizon is held off', async () => {
   const { openSignalOnMarket } = await import('@/lib/db');
   const { withPosition } = await import('@/lib/position');
-  // BRENT is holding the intraday signal opened by the test above.
-  assert.equal(openSignalOnMarket('BRENT')!.horizon, 'intraday');
+  // The second market is holding the intraday signal opened by the test above.
+  assert.equal(openSignalOnMarket(other.id)!.horizon, 'intraday');
 
-  const scalp = { ...analyseIntraday(gold, bars(1), quote(2158), now), instrumentId: 'BRENT',
+  const scalp = { ...analyseIntraday(market, bars(1), quote(2158), now), instrumentId: other.id,
     horizon: 'scalp' as const, updatedAt: now + 60_000 };
   const held = withPosition(scalp);
   assert.equal(held.type, 'WAIT');
@@ -200,7 +203,7 @@ test('signals are refused outside the configured trading hours, and the window m
     });
 
   const context = buildContext({
-    instrumentId: gold.id,
+    instrumentId: market.id,
     candles: {
       context: series(3_600_000, CANDLE_DEPTH.context),
       direction: series(900_000, CANDLE_DEPTH.direction),
