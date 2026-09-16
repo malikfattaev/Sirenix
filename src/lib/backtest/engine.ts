@@ -82,12 +82,21 @@ const BARS_PER_DAY: Record<TimeframeRole, number> = {
   context: 24,
 };
 
-/** Per-role download ceiling, so one run never turns into hundreds of requests. */
+/**
+ * Per-role download ceiling, so one run never turns into hundreds of requests.
+ *
+ * All four cover the same forty-one days. They used not to — the entry frame
+ * reached three weeks and the hourly frame six — which meant a long replay
+ * silently ran on whatever the shortest frame could supply, and the extra bars
+ * downloaded for the others were never looked at. Forty-one days is roughly six
+ * weeks of trading, which is what it takes for a market to produce enough
+ * signals to be judged on each half of the sample separately.
+ */
 const MAX_BARS: Record<TimeframeRole, number> = {
-  entry: 30000,
-  setup: 8000,
-  direction: 3000,
-  context: 1000,
+  entry: 41 * BARS_PER_DAY.entry,
+  setup: 41 * BARS_PER_DAY.setup,
+  direction: 41 * BARS_PER_DAY.direction,
+  context: 41 * BARS_PER_DAY.context,
 };
 
 export interface BacktestData {
