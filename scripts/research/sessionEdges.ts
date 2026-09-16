@@ -23,9 +23,10 @@
  *
  * Usage: npx tsx --env-file-if-exists=.env.local scripts/research/sessionEdges.ts [bars]
  */
-import { atr as atrSeries, median } from '@/lib/indicators';
+import { atr as atrSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
 import { hourlyCandles } from '../lib/hourly';
+import { describe, median } from '../lib/stats';
 
 const bars = Number(process.argv[2] ?? 5000);
 
@@ -130,30 +131,6 @@ function daysOf(candles: Candle[], session: { open: number; close: number }): Da
     volume: volumes > 0 ? day.volume / volumes : 1,
     range: ranges > 0 ? day.range / ranges : 1,
   }));
-}
-
-const mean = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
-
-interface Stat {
-  n: number;
-  mean: number;
-  median: number;
-  hit: number;
-  t: number;
-}
-
-function describe(values: number[]): Stat {
-  if (values.length === 0) return { n: 0, mean: 0, median: 0, hit: 0, t: 0 };
-  const m = mean(values);
-  const variance = mean(values.map((v) => (v - m) ** 2));
-  const stderr = Math.sqrt(variance / values.length);
-  return {
-    n: values.length,
-    mean: m,
-    median: median(values),
-    hit: values.filter((v) => v > 0).length / values.length,
-    t: stderr > 0 ? m / stderr : 0,
-  };
 }
 
 /**

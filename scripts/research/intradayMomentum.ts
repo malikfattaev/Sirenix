@@ -25,9 +25,11 @@
  *
  * Usage: npx tsx --env-file-if-exists=.env.local scripts/research/intradayMomentum.ts [bars]
  */
-import { atr as atrSeries, median } from '@/lib/indicators';
+import { atr as atrSeries } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
 import { cachedCandles } from '../lib/candles';
+import { byDate, sessionsByMonth, slotter } from '../lib/sessions';
+import { describe, mean, median } from '../lib/stats';
 
 const bars = Number(process.argv[2] ?? 20000);
 
@@ -44,45 +46,7 @@ const MARKETS = [
 ];
 
 /** Which fifteen-minute slot of the UTC day a candle closes in. */
-const slotOf = (time: number) => {
-  const date = new Date(time);
-  return (date.getUTCHours() * 60 + date.getUTCMinutes()) / 15;
-};
-const dateOf = (time: number) => new Date(time).toISOString().slice(0, 10);
-const monthOf = (time: number) => new Date(time).toISOString().slice(0, 7);
-
-/**
- * The session, found in the volume rather than declared.
- *
- * Averaged per month, so a market that moves with daylight saving is followed
- * rather than smeared across both sets of hours.
- */
-function sessionsByMonth(candles: Candle[]): Map<string, { open: number; close: number }> {
-  const byMonth = new Map<string, number[][]>();
-
-  for (const candle of candles) {
-    const month = monthOf(candle.closeTime);
-    const slots = byMonth.get(month) ?? Array.from({ length: SLOTS_PER_DAY }, () => [] as number[]);
-    slots[slotOf(candle.closeTime)].push(candle.volume);
-    byMonth.set(month, slots);
-  }
-
-  const sessions = new Map<string, { open: number; close: number }>();
-  for (const [month, slots] of byMonth) {
-    const averages = slots.map((values) => (values.length ? median(values) : 0));
-    const busiest = Math.max(...averages);
-    if (busiest <= 0) continue;
-
-    const active = averages
-      .map((value, slot) => ({ value, slot }))
-      .filter((entry) => entry.value >= busiest * SESSION_VOLUME_SHARE)
-      .map((entry) => entry.slot);
-    if (active.length < SLOTS_PER_HALF_HOUR * 4) continue;
-
-    sessions.set(month, { open: Math.min(...active), close: Math.max(...active) });
-  }
-  return sessions;
-}
+const slotOf = slotter(SLOTS_PER_DAY);
 
 interface Day {
   /** First half-hour return since the previous session's close, in ATR. */
@@ -97,20 +61,15 @@ interface Day {
 
 function daysOf(candles: Candle[]): Day[] {
   const atr = atrSeries(candles, 14 * 4);
-  const sessions = sessionsByMonth(candles);
-
-  const byDate = new Map<string, { index: number; candle: Candle }[]>();
-  for (const [index, candle] of candles.entries()) {
-    const date = dateOf(candle.closeTime);
-    const list = byDate.get(date) ?? [];
-    list.push({ index, candle });
-    byDate.set(date, list);
-  }
+  const sessions = sessionsByMonth(candles, SLOTS_PER_DAY, {
+    share: SESSION_VOLUME_SHARE,
+    minSlots: SLOTS_PER_HALF_HOUR * 4,
+  });
 
   const raw: Day[] = [];
   let previousClose: number | null = null;
 
-  for (const [date, list] of [...byDate.entries()].sort()) {
+  for (const [date, list] of [...byDate(candles).entries()].sort()) {
     const session = sessions.get(date.slice(0, 7));
     if (!session) continue;
 
@@ -153,22 +112,6 @@ function daysOf(candles: Candle[]): Day[] {
     volume: volumes > 0 ? day.volume / volumes : 1,
     range: ranges > 0 ? day.range / ranges : 1,
   }));
-}
-
-const mean = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
-
-function describe(values: number[]) {
-  if (values.length === 0) return { n: 0, mean: 0, median: 0, hit: 0, t: 0 };
-  const m = mean(values);
-  const variance = mean(values.map((v) => (v - m) ** 2));
-  const stderr = Math.sqrt(variance / values.length);
-  return {
-    n: values.length,
-    mean: m,
-    median: median(values),
-    hit: values.filter((v) => v > 0).length / values.length,
-    t: stderr > 0 ? m / stderr : 0,
-  };
 }
 
 /** Take the side the first half-hour went, hold the last half-hour, pay once. */

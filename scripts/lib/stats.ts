@@ -1,4 +1,7 @@
 /** The handful of numbers every study in here reports, and the test they have to pass. */
+import { median } from '@/lib/indicators';
+
+export { median };
 
 export interface Stat {
   n: number;
@@ -13,13 +16,6 @@ export interface Stat {
 
 export const mean = (values: number[]) =>
   values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-
-export function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = sorted.length >> 1;
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
 
 export function describe(values: number[]): Stat {
   if (values.length === 0) return { n: 0, mean: 0, median: 0, hit: 0, t: 0, total: 0 };

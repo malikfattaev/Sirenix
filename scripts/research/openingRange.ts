@@ -24,9 +24,10 @@
  *
  * Usage: npx tsx --env-file-if-exists=.env.local scripts/research/openingRange.ts [bars]
  */
-import { median } from '@/lib/indicators';
 import type { Candle } from '@/lib/market/candles';
 import { cachedCandles } from '../lib/candles';
+import { byDate, sessionsByMonth, slotter, type Session } from '../lib/sessions';
+import { describe, median } from '../lib/stats';
 
 const bars = Number(process.argv[2] ?? 40000);
 
@@ -51,37 +52,7 @@ const MARKETS = [
   'J225', 'HK50', 'GOLD', 'OIL_BRENT', 'OIL_CRUDE',
 ];
 
-const slotOf = (time: number) => {
-  const date = new Date(time);
-  return (date.getUTCHours() * 60 + date.getUTCMinutes()) / MINUTES_PER_SLOT;
-};
-const dateOf = (time: number) => new Date(time).toISOString().slice(0, 10);
-const monthOf = (time: number) => new Date(time).toISOString().slice(0, 7);
-
-/** The session, found in the volume, per month, so daylight saving follows itself. */
-function sessionsByMonth(candles: Candle[]): Map<string, { open: number; close: number }> {
-  const byMonth = new Map<string, number[][]>();
-  for (const candle of candles) {
-    const month = monthOf(candle.closeTime);
-    const slots = byMonth.get(month) ?? Array.from({ length: SLOTS_PER_DAY }, () => [] as number[]);
-    slots[slotOf(candle.closeTime)].push(candle.volume);
-    byMonth.set(month, slots);
-  }
-
-  const sessions = new Map<string, { open: number; close: number }>();
-  for (const [month, slots] of byMonth) {
-    const averages = slots.map((values) => (values.length ? median(values) : 0));
-    const busiest = Math.max(...averages);
-    if (busiest <= 0) continue;
-    const active = averages
-      .map((value, slot) => ({ value, slot }))
-      .filter((entry) => entry.value >= busiest * SESSION_VOLUME_SHARE)
-      .map((entry) => entry.slot);
-    if (active.length < 12) continue;
-    sessions.set(month, { open: Math.min(...active), close: Math.max(...active) });
-  }
-  return sessions;
-}
+const slotOf = slotter(SLOTS_PER_DAY);
 
 interface Trade {
   epic: string;
@@ -107,7 +78,7 @@ interface Trade {
  */
 function tradeOf(
   day: { index: number; candle: Candle }[],
-  session: { open: number; close: number },
+  session: Session,
   rangeBars: number,
   targetR: number,
 ): { r: number; volume: number; cost: number } | null {
@@ -156,23 +127,6 @@ function tradeOf(
   return { r: move - spread / risk, volume, cost: spread / risk };
 }
 
-const mean = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
-
-function describe(values: number[]) {
-  if (values.length === 0) return { n: 0, mean: 0, median: 0, hit: 0, t: 0, total: 0 };
-  const m = mean(values);
-  const variance = mean(values.map((v) => (v - m) ** 2));
-  const stderr = Math.sqrt(variance / values.length);
-  return {
-    n: values.length,
-    mean: m,
-    median: median(values),
-    hit: values.filter((v) => v > 0).length / values.length,
-    t: stderr > 0 ? m / stderr : 0,
-    total: values.reduce((a, b) => a + b, 0),
-  };
-}
-
 function line(name: string, trades: Trade[]): string {
   if (trades.length < 30) return `  ${name.padEnd(34)} only ${trades.length} trades`;
   const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date));
@@ -194,18 +148,14 @@ function line(name: string, trades: Trade[]): string {
 async function main() {
   console.log(`Loading ${bars} five-minute candles for ${MARKETS.length} markets...\n`);
 
-  const loaded = new Map<string, { days: Map<string, { index: number; candle: Candle }[]>; sessions: Map<string, { open: number; close: number }> }>();
+  const loaded = new Map<string, { days: ReturnType<typeof byDate>; sessions: Map<string, Session> }>();
   for (const epic of MARKETS) {
     try {
       const candles = await cachedCandles(epic, 'MINUTE_5', bars);
-      const days = new Map<string, { index: number; candle: Candle }[]>();
-      for (const [index, candle] of candles.entries()) {
-        const date = dateOf(candle.closeTime);
-        const list = days.get(date) ?? [];
-        list.push({ index, candle });
-        days.set(date, list);
-      }
-      loaded.set(epic, { days, sessions: sessionsByMonth(candles) });
+      loaded.set(epic, {
+        days: byDate(candles),
+        sessions: sessionsByMonth(candles, SLOTS_PER_DAY, { share: SESSION_VOLUME_SHARE, minSlots: 12 }),
+      });
       process.stdout.write('.');
     } catch (error) {
       console.error(`\n${epic}: ${error instanceof Error ? error.message : error}`);
