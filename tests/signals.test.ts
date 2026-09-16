@@ -184,3 +184,41 @@ test('one position per market: the other horizon is held off', async () => {
   // The same horizon still re-states its own signal rather than standing aside.
   assert.equal(withPosition({ ...scalp, horizon: 'intraday' }).type, 'LONG');
 });
+
+test('signals are refused outside the configured trading hours, and the window may wrap midnight', async () => {
+  const { buildContext } = await import('@/lib/strategy/context');
+  const { decide } = await import('@/lib/strategy');
+  const { DEFAULT_TUNING, CANDLE_DEPTH } = await import('@/lib/config');
+
+  // 13:00 UTC, so a window that includes 13 admits it and one that does not refuses.
+  const at = Date.UTC(2026, 0, 5, 13, 30);
+  const series = (step: number, count: number): Candle[] =>
+    Array.from({ length: count }, (_, i) => {
+      const close = 2000 + i * 2;
+      return { time: at - (count - i) * step, closeTime: at - (count - 1 - i) * step,
+        open: close - 1, close, high: close + 1, low: close - 1, spread: 2, volume: 10 };
+    });
+
+  const context = buildContext({
+    instrumentId: gold.id,
+    candles: {
+      context: series(3_600_000, CANDLE_DEPTH.context),
+      direction: series(900_000, CANDLE_DEPTH.direction),
+      setup: series(300_000, CANDLE_DEPTH.setup),
+      entry: series(60_000, CANDLE_DEPTH.entry),
+    },
+    price: 2000, bid: 1999, ask: 2001, spread: 2, decimals: 2,
+    marketStatus: 'TRADEABLE', now: at,
+  })!;
+  assert.ok(context);
+
+  const outside = decide(context, { ...DEFAULT_TUNING, tradingHours: { from: 20, to: 22 } });
+  assert.equal(outside.type, 'WAIT');
+  assert.equal(outside.rejections![0].code, 'hours');
+
+  // Inside the window the clock says nothing, so whatever happens next is not the gate.
+  for (const hours of [{ from: 7, to: 16 }, { from: 22, to: 14 }]) {
+    const inside = decide(context, { ...DEFAULT_TUNING, tradingHours: hours });
+    assert.notEqual(inside.rejections?.[0]?.code, 'hours');
+  }
+});

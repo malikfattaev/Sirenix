@@ -80,6 +80,22 @@ export function decide(
     return empty(`рынок ${MARKET_STATUS[context.marketStatus] ?? 'закрыт'}`, [],
       [{ code: 'market_closed', detail: context.marketStatus }]);
   }
+  // Outside the hours where a move is large beside the spread there is nothing
+  // to trade for: the toll is the same and the distance is a third of it.
+  const hours = tuning.tradingHours;
+  if (hours) {
+    const hour = new Date(context.now).getUTCHours();
+    const open = hours.from <= hours.to
+      ? hour >= hours.from && hour <= hours.to
+      : hour >= hours.from || hour <= hours.to;
+    if (!open) {
+      return empty(
+        `вне торговых часов, спред сейчас съедает движение (${hours.from}:00–${hours.to}:59 UTC)`,
+        [],
+        [{ code: 'hours', detail: `${hour} outside ${hours.from}-${hours.to} UTC` }],
+      );
+    }
+  }
   if (context.regime === 'CHOP') {
     return empty('рынок пилит, сетапы не работают', [context.regimeReason],
       [{ code: 'chop', detail: context.regimeReason }]);

@@ -114,6 +114,8 @@ function featuresAt(series: Series, i: number): number[] | null {
 interface Row {
   epic: string;
   type: string;
+  /** UTC hour the observation opens in, which decides what the spread costs. */
+  hour: number;
   /** Where in the history this sits, 0 to 1, so the sample can be halved. */
   position: number;
   features: number[];
@@ -171,6 +173,7 @@ async function collect(): Promise<Row[]> {
       rows.push({
         epic: entry.epic,
         type: entry.type,
+        hour: new Date(candles[i].closeTime).getUTCHours(),
         position: i / candles.length,
         features,
         forward,
@@ -301,6 +304,34 @@ function report(rows: Row[], horizon: number, hours: number, title: string, limi
   for (const l of lines.sort((x, y) => y.worst - x.worst).slice(0, limit)) console.log(`  ${l.line}`);
 }
 
+/**
+ * The half of the day in which a trade has room to pay for itself.
+ *
+ * Not a forecast and not a list: for each UTC hour the round trip is compared
+ * with how far this market typically travels over the horizon in question, and
+ * the hours where that ratio is best are kept. The ranking comes out of the
+ * same rows the study runs on, so there is no set of hours written down here to
+ * be right about, and a market that shifts its hours moves its own answer.
+ *
+ * The reason to look at all: the toll barely changes across the day, but the
+ * distance travelled changes by a factor of three, so the same spread eats a
+ * tenth of one hour's move and half of another's.
+ */
+function bestHours(rows: Row[], horizon: number): Set<number> {
+  const ranked: { hour: number; ratio: number }[] = [];
+
+  for (let hour = 0; hour < 24; hour += 1) {
+    const here = rows.filter((row) => row.hour === hour);
+    if (here.length < 50) continue;
+    const cost = median(here.map((row) => row.cost));
+    const move = median(here.map((row) => Math.abs(row.forward[horizon])));
+    if (cost > 0) ranked.push({ hour, ratio: move / cost });
+  }
+
+  ranked.sort((a, b) => b.ratio - a.ratio);
+  return new Set(ranked.slice(0, Math.ceil(ranked.length / 2)).map((entry) => entry.hour));
+}
+
 async function main() {
   console.log(`Loading ${bars} hourly candles for ${UNIVERSE.length} markets...`);
   const rows = await collect();
@@ -316,6 +347,32 @@ async function main() {
 
   for (const [horizon, hours] of HORIZONS.entries()) {
     report(rows, horizon, hours, 'everything, pooled');
+
+    // The same question, asked only where the spread is small beside the move.
+    const good = bestHours(rows, horizon);
+    const inHours = rows.filter((row) => good.has(row.hour));
+    console.log(
+      `\n  cheap hours for a ${hours}h hold, UTC: ${[...good].sort((a, b) => a - b).join(', ')}` +
+        ` — cost ${median(inHours.map((r) => r.cost)).toFixed(3)} ATR` +
+        ` against ${median(rows.filter((r) => !good.has(r.hour)).map((r) => r.cost)).toFixed(3)} in the rest`,
+    );
+    report(inHours, horizon, hours, 'cheap hours only');
+
+    // And on the markets whose quote is tightest, which the hourly cost table
+    // says are a different proposition from the rest of the board.
+    const cheapest = (() => {
+      const byEpic = new Map<string, number[]>();
+      for (const row of rows) byEpic.set(row.epic, [...(byEpic.get(row.epic) ?? []), row.cost]);
+      return new Set(
+        [...byEpic.entries()]
+          .map(([epic, costs]) => ({ epic, cost: median(costs) }))
+          .sort((a, b) => a.cost - b.cost)
+          .slice(0, 10)
+          .map((entry) => entry.epic),
+      );
+    })();
+    console.log(`\n  tightest ten markets: ${[...cheapest].join(', ')}`);
+    report(rows.filter((row) => cheapest.has(row.epic) && good.has(row.hour)), horizon, hours, 'tightest markets, cheap hours');
 
     // The same question asked of one market at a time: a pooled average can
     // bury an effect that only one instrument has.

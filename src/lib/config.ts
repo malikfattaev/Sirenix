@@ -299,7 +299,16 @@ export interface StrategyTuning {
   maxStopAtr: number;
   /** The move is already gone once price is this far past the trigger, in 1m ATRs. */
   maxChaseAtr: number;
-  /** Risk must cover the spread at least this many times. */
+  /**
+   * Risk must cover the spread at least this many times.
+   *
+   * This is the single most important number in this file. Across the opening
+   * range study, the intraday momentum study and the short-horizon study, the
+   * result of a trade tracked the round trip almost exactly: pay a third of the
+   * risk in spread and lose about a third of it, pay a tenth and lose about a
+   * tenth. Three — where this sat for a long time — allows the spread to be a
+   * third of the stop, which is the expensive end of that range.
+   */
   minRiskToSpread: number;
   /** The first target must cover the spread at least this many times. */
   minRewardToSpread: number;
@@ -310,6 +319,16 @@ export interface StrategyTuning {
   maxTargetAtr: number;
   /** A scalp still open after this many minutes is closed at market. */
   maxHoldMinutes: number;
+  /**
+   * UTC hours, inclusive, in which a signal may be issued. `null` means any.
+   *
+   * The spread barely changes across the day but the distance price travels
+   * changes by a factor of three, so the same quote that costs a tenth of an
+   * hour's move at the New York open costs two fifths of it once the cash
+   * markets are shut. A signal issued in the second kind of hour is behind
+   * before it is filled, and no amount of reading the chart fixes that.
+   */
+  tradingHours: { from: number; to: number } | null;
   /** Bars to stand aside after a trade closes, so one move is traded once. */
   cooldownBars: number;
   /** What happens to the position between entry and exit. */
@@ -328,10 +347,36 @@ export const DEFAULT_TUNING: StrategyTuning = {
   minStopAtr: 0.7,
   maxStopAtr: 2.6,
   maxChaseAtr: 1.8,
-  minRiskToSpread: 3,
+  /**
+   * Six, measured. Swept over 3, 4, 5, 6, 8 and 10 on 21 days of one-minute
+   * candles, split in half: on US 30 — the only market on the board that pays —
+   * three returns +4.5R then level, and six returns +6.2R then +0.6R, positive
+   * on both halves with twelve fewer trades. Brent improves as well, from -9.6R
+   * to -8.3R. Gold is level either way at about -6R, which is a statement about
+   * gold rather than about this number.
+   */
+  minRiskToSpread: 6,
   minRewardToSpread: 5,
   maxTargetAtr: 1.8,
   maxHoldMinutes: 20,
+  /**
+   * Off, measured, and worth recording why.
+   *
+   * The hourly cost table makes a strong case for a clock: the round trip is
+   * roughly flat across the day while the distance travelled triples, so an
+   * hour's move covers the spread seventeen times over at the New York open and
+   * two and a half times at nine in the evening. Every window built from that —
+   * London, the overlap, the New York cash session, the working day — lost to
+   * trading around the clock on the live engine: on US 30, +6.8R around the
+   * clock against +2.9R for the best window.
+   *
+   * The reason is that `minRiskToSpread` already does this job and does it
+   * better. It measures the spread that is actually quoted against the stop
+   * that is actually planned, trade by trade, so an expensive hour is refused
+   * by name rather than by the clock, and a cheap hour outside the window is
+   * still taken. A clock is a worse instrument for reading the same thing.
+   */
+  tradingHours: null,
   cooldownBars: 5,
   exit: NO_MANAGEMENT,
   /**
