@@ -33,8 +33,17 @@ import { describe } from '../lib/stats';
 
 const days = Number(process.argv[2] ?? 41);
 
-/** Minutes held, ignoring both barriers. */
-const HORIZONS = [20, 60, 120];
+/**
+ * Minutes held, ignoring both barriers.
+ *
+ * The first three are the range the account works in. The last three are well
+ * outside it and are here because the arithmetic says they are where an edge
+ * would first appear: the signal grows roughly with the square root of time
+ * while the spread does not, and the two were measured to meet somewhere
+ * between twelve and twenty-four hours. If the engine's entries are worth
+ * anything at all, this is where it shows.
+ */
+const HORIZONS = [20, 60, 120, 360, 720, 1440];
 
 
 interface Observation {

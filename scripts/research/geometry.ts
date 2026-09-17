@@ -1,27 +1,25 @@
 /**
- * Can any placement of the stop and the target rescue a coin flip?
+ * How long a position has to be held before the entries are worth anything.
  *
- * `anatomy.ts` priced the three ways a trade can end, over 332 of them: 19%
- * reached the target and paid 1.83R, 54% were stopped and paid -1R, and the
- * remaining 27% ran out of time and were closed at market for +0.357R each.
- * That last bucket looked for a moment like evidence the entries point the
- * right way and only the geometry is wrong.
+ * This began as a sweep of the stop and the target, on the theory that the
+ * trades closed by the clock were profitable and only the geometry was wrong.
+ * That theory was false — a trade reaches the clock precisely by not having hit
+ * its stop, so the bucket is positive by construction — and `direction.ts`
+ * settled it by removing both barriers: the engine picks the right side 45% of
+ * the time at twenty minutes and 44% at two hours. No placement of a stop
+ * rescues a coin flip.
  *
- * It is not. A trade reaches the clock precisely by not having hit its stop,
- * and "did not fall" is most of the way to "rose", so the bucket is positive by
- * construction. `direction.ts` removed both barriers and followed every signal
- * for a fixed number of minutes instead: 47% right at twenty minutes, 49% at
- * sixty, 45% at two hours. There is no edge under the geometry.
+ * The same test carried on past the account's two-hour ceiling and found
+ * something else. At six hours the signals are worth +0.22R, at twelve +0.52R
+ * with a median of +0.67 and a 54% hit rate. The spread is a fixed cost and the
+ * move grows roughly with the square root of the time held, so the two cross
+ * somewhere in between — which is what the hourly study measured independently
+ * at twelve to twenty-four hours.
  *
- * This sweep is therefore not a search but the end of the argument. Three
- * things decide what happens between the entry and the exit — how far the stop
- * sits beyond the invalidation level, how far the target may be, and how long
- * the position is given — and they are swept together because they interact: a
- * wider stop is a worse reward-to-risk and has to earn it back with a higher
- * hit rate, and a longer hold only helps if the stop survives the extra time.
- *
- * If a row here comes out positive on both halves it is a configuration fitted
- * to six weeks, not a finding, because nothing underneath it predicts anything.
+ * So the sweep is now about the hold, and the stop and target are swept only
+ * widely enough to show they are not what decides it. The long holds are well
+ * outside what the account currently allows, and are here to put a number on
+ * what that limit costs rather than to propose breaking it.
  *
  * Usage: npx tsx --env-file-if-exists=.env.local scripts/research/geometry.ts [days]
  */
@@ -32,14 +30,27 @@ import { ACTIVE_MARKETS } from '../lib/universe';
 
 const days = Number(process.argv[2] ?? 41);
 
-/** Stop distance beyond the invalidation level, in entry-frame ATRs. */
-const STOP_BUFFER = [0.6, 1.2, 2.0];
+/**
+ * Stop and target are held at the live values.
+ *
+ * They were swept once, three values each against three holds, and the machine
+ * ran out of memory before it finished — 528 replays of six weeks of minutes is
+ * more than this is worth. It is also the wrong question: `direction.ts` showed
+ * the entries are a coin flip inside two hours, so no placement of a barrier
+ * can rescue them, and the one variable that changes the answer is how long the
+ * position is held. One geometry, four holds.
+ */
+const STOP_BUFFER = [0.6];
+const TARGET_CEILING = [1.8];
 
-/** Ceiling on how far the first target may sit, in setup ATRs. */
-const TARGET_CEILING = [1.0, 1.8, 3.0];
-
-/** Minutes before the clock closes the position at market. */
-const HOLD = [20, 60, 120];
+/**
+ * Minutes before the clock closes the position at market.
+ *
+ * Twenty is what the engine does now and 120 is the account's stated ceiling.
+ * The rest are past it, because that is where the entries stop being a coin
+ * flip, and a limit is easier to argue about with its cost written down.
+ */
+const HOLD = [20, 120, 360, 720];
 
 
 /** Both halves must trade this often before a row is worth reading. */
