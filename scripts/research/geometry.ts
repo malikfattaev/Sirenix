@@ -31,26 +31,52 @@ import { ACTIVE_MARKETS } from '../lib/universe';
 const days = Number(process.argv[2] ?? 41);
 
 /**
- * Stop and target are held at the live values.
+ * Three configurations, not a grid, and each one answers a question.
  *
- * They were swept once, three values each against three holds, and the machine
- * ran out of memory before it finished — 528 replays of six weeks of minutes is
- * more than this is worth. It is also the wrong question: `direction.ts` showed
- * the entries are a coin flip inside two hours, so no placement of a barrier
- * can rescue them, and the one variable that changes the answer is how long the
- * position is held. One geometry, four holds.
- */
-const STOP_BUFFER = [0.6];
-const TARGET_CEILING = [1.8];
-
-/**
- * Minutes before the clock closes the position at market.
+ * The first is the live engine. The second and third come from what the hold
+ * sweep found: at 360 minutes and at 720 the engine returns exactly the same
+ * -64.4R, which can only mean no position survives to either. The stop reaches
+ * it first, every time, and that is why lengthening the clock changed nothing.
  *
- * Twenty is what the engine does now and 120 is the account's stated ceiling.
- * The rest are past it, because that is where the entries stop being a coin
- * flip, and a limit is easier to argue about with its cost written down.
+ * `direction.ts` measured its +0.52R at twelve hours with no stop at all. So
+ * the question is whether a stop far enough away to be reached rarely lets that
+ * through: the entry and the planned risk stay as they are, the barrier moves
+ * out, and the position is given the time the measurement said it needs.
  */
-const HOLD = [20, 120, 360, 720];
+const CONFIGURATIONS = [
+  { note: 'live', stopBufferAtr: 0.6, maxStopAtr: 2.6, maxHoldMinutes: 20 },
+  // A wide stop on its own issues one signal in six weeks: the target must
+  // clear one and a half times the risk and may not sit beyond 1.8 ATR, so
+  // widening the stop puts every setup out of reach of its own target. The
+  // target has to travel with it or the test measures the reward rule instead.
+  {
+    note: 'wide, 2h',
+    stopBufferAtr: 3.0,
+    maxStopAtr: 8,
+    maxTargetAtr: 6,
+    minRiskReward: 0.8,
+    minRewardToSpread: 3,
+    maxHoldMinutes: 120,
+  },
+  {
+    note: 'wide, 12h',
+    stopBufferAtr: 3.0,
+    maxStopAtr: 8,
+    maxTargetAtr: 6,
+    minRiskReward: 0.8,
+    minRewardToSpread: 3,
+    maxHoldMinutes: 720,
+  },
+  {
+    note: 'very wide, 12h',
+    stopBufferAtr: 6.0,
+    maxStopAtr: 16,
+    maxTargetAtr: 12,
+    minRiskReward: 0.8,
+    minRewardToSpread: 3,
+    maxHoldMinutes: 720,
+  },
+];
 
 
 /** Both halves must trade this often before a row is worth reading. */
@@ -80,61 +106,55 @@ async function main() {
     }
   }
 
+  console.log(`\n${days} days, ${data.size} markets pooled.\n`);
   console.log(
-    `\n${days} days, ${data.size} markets pooled. Stop buffer x target ceiling x hold.\n`,
-  );
-  console.log(
-    `  ${'stop'.padEnd(6)} ${'target'.padEnd(7)} ${'hold'.padEnd(6)} ` +
-      `${'n'.padStart(5)} ${'/day'.padStart(5)} ${'win'.padStart(5)} ${'exp'.padStart(8)} ${'total'.padStart(8)}  ` +
+    `  ${'configuration'.padEnd(16)} ${'n'.padStart(5)} ${'/day'.padStart(5)} ${'win'.padStart(5)} ` +
+      `${'timeouts'.padStart(9)} ${'exp'.padStart(8)} ${'total'.padStart(8)}  ` +
       `${'first'.padStart(8)} ${'second'.padStart(8)}`,
   );
 
-  const rows: { line: string; totalR: number; survives: boolean }[] = [];
+  for (const configuration of CONFIGURATIONS) {
+    const { note, ...overrides } = configuration;
+    const tuning = { ...DEFAULT_TUNING, ...overrides };
 
-  for (const stopBufferAtr of STOP_BUFFER) {
-    for (const maxTargetAtr of TARGET_CEILING) {
-      for (const maxHoldMinutes of HOLD) {
-        const tuning = { ...DEFAULT_TUNING, stopBufferAtr, maxTargetAtr, maxHoldMinutes };
+    let whole: Cell = { signals: 0, totalR: 0, winRate: 0 };
+    let first: Cell = { signals: 0, totalR: 0, winRate: 0 };
+    let second: Cell = { signals: 0, totalR: 0, winRate: 0 };
+    let wins = 0;
+    let timeouts = 0;
 
-        let whole: Cell = { signals: 0, totalR: 0, winRate: 0 };
-        let first: Cell = { signals: 0, totalR: 0, winRate: 0 };
-        let second: Cell = { signals: 0, totalR: 0, winRate: 0 };
-        let wins = 0;
-
-        for (const instrument of ACTIVE_MARKETS) {
-          const loaded = data.get(instrument.id);
-          if (!loaded) continue;
-          const all = replay(instrument, loaded, { days, tuning });
-          whole = add(whole, all);
-          wins += all.wins;
-          first = add(first, replay(instrument, loaded, { days, tuning, sample: [0, 0.5] }));
-          second = add(second, replay(instrument, loaded, { days, tuning, sample: [0.5, 1] }));
-        }
-
-        if (whole.signals === 0) continue;
-        const survives =
-          first.totalR > 0 && second.totalR > 0 && Math.min(first.signals, second.signals) >= MIN_PER_HALF;
-
-        rows.push({
-          totalR: whole.totalR,
-          survives,
-          line:
-            `  ${String(stopBufferAtr).padEnd(6)} ${String(maxTargetAtr).padEnd(7)} ${`${maxHoldMinutes}m`.padEnd(6)} ` +
-            `${String(whole.signals).padStart(5)} ${(whole.signals / days).toFixed(1).padStart(5)} ` +
-            `${((wins / whole.signals) * 100).toFixed(0).padStart(4)}% ` +
-            `${(whole.totalR / whole.signals).toFixed(3).padStart(7)}R ${signed(whole.totalR).padStart(8)}  ` +
-            `${signed(first.totalR).padStart(8)} ${signed(second.totalR).padStart(8)}` +
-            (survives ? '  <-- SURVIVES' : ''),
-        });
-      }
+    for (const instrument of ACTIVE_MARKETS) {
+      const loaded = data.get(instrument.id);
+      if (!loaded) continue;
+      const all = replay(instrument, loaded, { days, tuning });
+      whole = add(whole, all);
+      wins += all.wins;
+      timeouts += all.timeouts;
+      first = add(first, replay(instrument, loaded, { days, tuning, sample: [0, 0.5] }));
+      second = add(second, replay(instrument, loaded, { days, tuning, sample: [0.5, 1] }));
     }
+
+    if (whole.signals === 0) {
+      console.log(`  ${note.padEnd(16)} no signals`);
+      continue;
+    }
+
+    // How many positions the clock had to close rather than a barrier. When
+    // this is near zero the hold is not the binding constraint, whatever it is
+    // set to, and lengthening it cannot change the answer.
+    const survives =
+      first.totalR > 0 && second.totalR > 0 && Math.min(first.signals, second.signals) >= MIN_PER_HALF;
+
+    console.log(
+      `  ${note.padEnd(16)} ${String(whole.signals).padStart(5)} ` +
+        `${(whole.signals / days).toFixed(1).padStart(5)} ` +
+        `${((wins / whole.signals) * 100).toFixed(0).padStart(4)}% ` +
+        `${`${((timeouts / whole.signals) * 100).toFixed(0)}%`.padStart(9)} ` +
+        `${(whole.totalR / whole.signals).toFixed(3).padStart(7)}R ${signed(whole.totalR).padStart(8)}  ` +
+        `${signed(first.totalR).padStart(8)} ${signed(second.totalR).padStart(8)}` +
+        (survives ? '  <-- SURVIVES' : ''),
+    );
   }
-
-  for (const row of rows) console.log(row.line);
-
-  const best = [...rows].sort((a, b) => b.totalR - a.totalR)[0];
-  console.log(`\n  best by total:\n${best.line}`);
-  console.log(`  rows positive on both halves: ${rows.filter((row) => row.survives).length} of ${rows.length}`);
 }
 
 main().catch((error) => {
