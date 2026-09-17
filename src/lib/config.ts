@@ -587,6 +587,41 @@ export const SIGNAL_LIFETIME_MS: Record<Horizon, number | null> = {
  * rest of the dashboard off the screen. `limit` is how deep the list goes,
  * which is also how much the filters have to work with.
  */
+/**
+ * What the engine has actually been measured to return per signal.
+ *
+ * Not a forecast and not a target: the result of replaying the live logic,
+ * unchanged, over 41 days of one-minute candles on the eleven markets that fire
+ * often enough to be judged. It is stated here so the interface can state it
+ * too, because a board that prints an entry, a stop and a target beside a
+ * strength out of a hundred reads as a recommendation, and this one has not
+ * earned that reading.
+ *
+ * The number is stable to a hundredth across everything that has been tried:
+ * -0.129R held twenty minutes, -0.106R with a wide stop held two hours,
+ * -0.105R with a wide stop held twelve. Per market it runs from -0.04R to
+ * -0.56R and per strategy from -0.095R to -0.266R. That constancy is the point.
+ * It is not a setting that is wrong; it is the round trip, and nothing in the
+ * engine earns it back.
+ *
+ * `direction.ts` says why: the side the engine picks is right 45% of the time
+ * at twenty minutes, 49% at an hour and 44% at two hours, and its own
+ * confluence score correlates -0.031 with what the trade goes on to do. There
+ * is no edge here yet.
+ *
+ * Delete this the day a replay on data the engine has not seen comes back
+ * positive on both halves, and not before.
+ */
+export const MEASURED_EDGE = {
+  /** Mean result per signal, in units of the risk planned for it. */
+  expectancyR: -0.11,
+  signals: 525,
+  days: 41,
+  markets: 11,
+  /** How much the confluence score explains of the outcome. Nothing. */
+  scoreCorrelation: -0.031,
+} as const;
+
 export const HISTORY = {
   visibleRows: 5,
   limit: 50,

@@ -9,6 +9,13 @@
   --color-long: #48d17a;
   --color-short: #ff6b6b;
   --color-wait: #a3a3a3;
+  /*
+   * For saying something about a signal rather than about the market.
+   * Deliberately not one of the three above: green, red and grey already mean
+   * buy, sell and stand aside on this board, and a warning drawn in any of them
+   * reads as a direction.
+   */
+  --color-notice: #e0a33a;
 }
 
 html,

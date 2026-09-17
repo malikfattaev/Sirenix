@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { HORIZON_LABEL } from '@/lib/config';
+import { HORIZON_LABEL, MEASURED_EDGE } from '@/lib/config';
 import type { Quote } from '@/lib/quotes';
 import type { Signal } from '@/lib/strategy/types';
 import { price, regimeLabel, time } from './format';
@@ -37,6 +37,25 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
       <span className="text-[11px] uppercase tracking-wider text-muted">{label}</span>
       <span className={`tabular text-sm font-medium ${accent ?? ''}`}>{value}</span>
     </div>
+  );
+}
+
+/**
+ * What the engine is measured to be worth, stated where the trade is offered.
+ *
+ * One line, not a wall: the number and where it comes from. It stays until a
+ * replay on data the engine has not seen comes back positive on both halves of
+ * the sample, at which point `MEASURED_EDGE` goes and this goes with it.
+ */
+function UnprovenNotice() {
+  const expectancy = MEASURED_EDGE.expectancyR.toFixed(2);
+  return (
+    <p className="mt-3 rounded-lg border border-notice/40 bg-notice/10 px-3 py-2 text-[12px] leading-snug text-notice">
+      <span className="font-semibold">Сигнал не проверен.</span>{' '}
+      На истории движок отдаёт <span className="tabular">{expectancy}R</span> за сигнал —
+      {' '}{MEASURED_EDGE.signals} сигналов, {MEASURED_EDGE.markets} рынков, {MEASURED_EDGE.days} дней.
+      Преимущества пока нет: это стоимость спреда. Торговать по нему — решение ваше.
+    </p>
   );
 }
 
@@ -121,7 +140,11 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
         {signal.type !== 'WAIT' && (
           <span
             className="tabular text-[12px] text-muted"
-            title="Сколько факторов сошлось: направление старших таймфреймов, уровни, VWAP, импульс, волатильность, новости. Это не вероятность прибыли."
+            title={
+              'Сколько факторов сошлось: направление старших таймфреймов, уровни, VWAP, импульс, ' +
+              'волатильность, новости. На истории эта оценка не связана с результатом — ' +
+              `корреляция ${MEASURED_EDGE.scoreCorrelation}, то есть сигналы с 85 закрывались не лучше, чем с 65.`
+            }
           >
             совпало {signal.score} из 100
           </span>
@@ -133,6 +156,16 @@ export function SignalCard({ signal, quote }: { signal: Signal; quote?: Quote })
           <div className={`h-full ${tone.bar}`} style={{ width: `${signal.score}%` }} />
         </div>
       )}
+
+      {/*
+        The card prints an entry, a stop and a target beside a strength out of a
+        hundred, and that reads as a recommendation whatever the wording says.
+        It has not earned that reading: replayed over six weeks on eleven
+        markets this engine returns -0.11R a signal, and it does so at every
+        holding period and on every market tried. Saying it here, on the card,
+        is the difference between a research tool and a bad tip.
+      */}
+      {signal.type !== 'WAIT' && <UnprovenNotice />}
 
       {plan ? (
         <div className="mt-4 divide-y divide-edge border-y border-edge">
